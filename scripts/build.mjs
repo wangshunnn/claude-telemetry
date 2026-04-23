@@ -2223,7 +2223,7 @@ function renderRecentSessions(tasks) {
             '<div class="reply-block">',
               '<div class="reply-head">',
                 '<span>AI 回复</span>',
-                '<span class="reply-meta">' + esc(task.reply.length + ' 字') + (task.replyTruncated ? ' · 已截断' : '') + '</span>',
+                '<span class="reply-meta">' + esc(task.reply.length + ' 字符') + (task.replyTruncated ? ' · 已截断' : '') + '</span>',
               '</div>',
               tokenMeta,
               '<pre class="reply-body">' + esc(task.reply) + '</pre>',

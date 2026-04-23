@@ -6,8 +6,12 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-23
+
 - Switched the default telemetry storage path to project-local `.claude/telemetry/` so Claude Code plugin commands can write dashboard artifacts without leaving the workspace.
 - Added `CLAUDE_TELEMETRY_ROOT` as an explicit override for shared telemetry storage outside the project.
+- Removed the dead `last_assistant_message` fallback in the Stop hook; the final reply is now sourced directly from the transcript.
+- Labeled the dashboard reply size in `字符` instead of `字` for accuracy on mixed-language output.
 
 ## [1.0.0] - 2026-04-23
 

@@ -5,18 +5,6 @@ import { ensureTelemetryDir } from './paths.mjs';
 
 const MAX_REPLY_LEN = 4000;
 
-function coerceReply(value) {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => (typeof item === 'string' ? item : item?.text ?? ''))
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  if (value && typeof value === 'object' && typeof value.text === 'string') return value.text;
-  return '';
-}
-
 async function extractTurnDataFromTranscript(path) {
   const empty = {
     reply: '',
@@ -82,7 +70,7 @@ async function main() {
 
   const turn = await extractTurnDataFromTranscript(input.transcript_path);
 
-  let reply = coerceReply(input.last_assistant_message) || turn.reply;
+  let reply = turn.reply;
   const truncated = reply.length > MAX_REPLY_LEN;
   if (truncated) reply = reply.slice(0, MAX_REPLY_LEN) + '…';
 
