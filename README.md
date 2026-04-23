@@ -51,6 +51,37 @@ Once installed, the plugin's hooks fire automatically. Use Claude in the project
 
 The command builds the current project's global `index.html` + `snapshot.json` and opens the dashboard in your browser.
 
+## Updating
+
+If you already installed the plugin from the marketplace, update with:
+
+```bash
+/plugin marketplace update soonwang-plugins
+/plugin update claude-telemetry
+/reload-plugins
+```
+
+Third-party marketplaces do not auto-refresh by default. Users can optionally enable marketplace auto-update in Claude Code's plugin UI.
+
+## Release process
+
+This repository follows Claude Code marketplace best practices:
+
+- The distributed plugin version is managed in `.claude-plugin/marketplace.json`
+- `.claude-plugin/plugin.json` intentionally omits `version` because this plugin is shipped from a marketplace
+- Stable releases start at `1.0.0`
+- Changes are documented in [CHANGELOG.md](./CHANGELOG.md)
+- Pre-release builds should use semver prerelease tags such as `1.1.0-beta.1`
+
+For each release:
+
+1. Update the plugin version in `.claude-plugin/marketplace.json`
+2. Update [CHANGELOG.md](./CHANGELOG.md)
+3. Validate locally with `claude plugin validate .` and `pnpm test`
+4. Push the release commit to GitHub
+
+After a new version is pushed, users update with the commands above.
+
 ## Config (optional)
 
 By default, the dashboard counts these as "knowledge targets":

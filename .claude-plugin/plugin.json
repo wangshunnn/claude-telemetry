@@ -1,6 +1,5 @@
 {
   "name": "claude-telemetry",
-  "version": "0.1.0",
   "description": "Per-turn knowledge-base hit-rate telemetry + offline dashboard for Claude Code. Collects hook events into a global ~/.claude/claude-telemetry project bucket and renders a self-contained HTML dashboard.",
   "author": {
     "name": "soonwang"
