@@ -1,0 +1,12 @@
+{
+  "name": "claude-telemetry-plugin",
+  "private": true,
+  "author": "Soon Wang <wangshunnn@gmail.com>",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

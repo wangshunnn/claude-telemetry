@@ -1,0 +1,17 @@
+{
+  "name": "claude-telemetry",
+  "version": "0.1.0",
+  "description": "Per-turn knowledge-base hit-rate telemetry + offline dashboard for Claude Code. Collects hook events into .claude/telemetry/events.jsonl and renders a self-contained HTML dashboard.",
+  "author": {
+    "name": "soonwang"
+  },
+  "keywords": [
+    "claude-code",
+    "telemetry",
+    "dashboard",
+    "hooks",
+    "observability"
+  ],
+  "license": "MIT",
+  "commands": "./commands"
+}
