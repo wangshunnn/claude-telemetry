@@ -9,8 +9,9 @@
  *   Set CLAUDE_TELEMETRY_ROOT to use a custom shared root instead.
  */
 
-import { createReadStream, existsSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 import { ensureTelemetryDir } from './paths.mjs';
 import { loadKnowledgeTargets } from './config.mjs';
 import {
@@ -79,6 +80,11 @@ const EVENT_META = {
     label: 'Write',
     shortLabel: 'write',
     color: '#dc2626',
+  },
+  skill_invoked: {
+    label: 'Skill',
+    shortLabel: 'skill',
+    color: '#d94841',
   },
   permission_request: {
     label: '审批请求',
@@ -265,6 +271,10 @@ function summarizeEvent(event) {
     case 'tool_write':
       label = event.tool ? `write:${String(event.tool).toLowerCase()}` : label;
       detail = compactPath(event.file);
+      break;
+    case 'skill_invoked':
+      label = event.skill ? `skill:${event.skill}` : label;
+      detail = typeof event.args === 'string' ? truncate(event.args, 140) : '';
       break;
     case 'permission_request':
       label = event.tool ? `approval:${event.tool}` : 'approval';
@@ -2336,7 +2346,7 @@ function renderDashboard(snapshot) {
           '<h4>当前统计口径</h4>',
           '<ul class="mini-list">',
             '<li><span>轮次</span><span>一次 user_prompt 对应的一轮对话</span></li>',
-            '<li><span>知识目标（默认）</span><span>docs/**/*.md、.claude/rules/**/*.md、**/skills/*/SKILL.md、子模块 AGENTS.md/CLAUDE.md（排除根、.claude/、.agents/）、.cursor/rules/**/*.mdc、.github/copilot-instructions.md</span></li>',
+            '<li><span>知识目标（默认）</span><span>docs/**/*.md、.claude/rules/**/*.md、**/skills/*/**（含 SKILL.md 与 Skill 工具调用）、子模块 AGENTS.md/CLAUDE.md（排除根、.claude/、.agents/）、.cursor/rules/**/*.mdc、.github/copilot-instructions.md</span></li>',
             '<li><span>分子（去重）</span><span>触发该目标的轮次数；同一轮多次命中只记 1 次</span></li>',
             '<li><span>全局触发率</span><span>触发该目标的轮次数 / 总轮次数</span></li>',
             '<li><span>知识内触发率</span><span>触发该目标的轮次数 / 知识命中轮次数</span></li>',
@@ -2518,12 +2528,39 @@ init();
 </html>`;
 }
 
+const NO_DATA_MESSAGE = [
+  '暂无本项目的 telemetry 数据。请完成至少一次 Claude Code 对话后，再次运行 /claude-telemetry:open。',
+  'No telemetry turns yet for this project. Collect at least one Claude Code turn, then run /claude-telemetry:open again.',
+].join('\n');
+
+function eventsFileIsEmpty() {
+  if (!existsSync(EVENTS_PATH)) return true;
+  try {
+    return statSync(EVENTS_PATH).size === 0;
+  } catch {
+    return true;
+  }
+}
+
+if (eventsFileIsEmpty()) {
+  if (existsSync(OUTPUT_PATH)) {
+    console.log(pathToFileURL(OUTPUT_PATH).toString());
+  } else {
+    console.log(NO_DATA_MESSAGE);
+  }
+  process.exit(0);
+}
+
 const { events, malformed } = await loadEvents();
 const snapshot = buildSnapshot(events, malformed);
 
 writeFileSync(SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2));
 writeFileSync(OUTPUT_PATH, renderHtml(snapshot));
 
-console.log('✓ Dashboard 已生成');
-console.log('  HTML:      ' + OUTPUT_PATH);
-console.log('  Snapshot:  ' + SNAPSHOT_PATH);
+const totalTaskCount = Number(snapshot?.metrics?.kpi?.totalTaskCount) || 0;
+if (totalTaskCount === 0) {
+  console.log(NO_DATA_MESSAGE);
+  process.exit(0);
+}
+
+console.log(pathToFileURL(OUTPUT_PATH).toString());

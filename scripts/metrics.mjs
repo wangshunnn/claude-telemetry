@@ -20,10 +20,27 @@ export function compactPath(path, projectRoot) {
   return parts.slice(-3).join('/');
 }
 
+export function extractSkillName(path) {
+  if (typeof path !== 'string' || !path) return null;
+  const match = /\/skills\/([^/]+)\//i.exec(path);
+  return match ? match[1] : null;
+}
+
 export function classifyKnowledgePath(path, targets, projectRoot) {
   if (typeof path !== 'string' || !path) return null;
   const matched = targets.find((item) => item.test(path, { projectRoot }));
   if (!matched) return null;
+  if (matched.kind === 'skill') {
+    const name = extractSkillName(path);
+    if (name) {
+      return {
+        key: `skill:${name}`,
+        label: name,
+        kind: 'skill',
+        kindLabel: matched.label,
+      };
+    }
+  }
   return {
     key: path,
     label: compactPath(path, projectRoot),
@@ -41,6 +58,17 @@ export function extractKnowledgeTarget(event, targets, projectRoot) {
   if (event.event === 'instructions_loaded') {
     const target = classifyKnowledgePath(event.raw?.file_path, targets, projectRoot);
     return target ? { ...target, source: 'instructions_loaded' } : null;
+  }
+  if (event.event === 'skill_invoked' && typeof event.skill === 'string' && event.skill) {
+    const skillTarget = targets.find((t) => t.kind === 'skill');
+    if (!skillTarget) return null;
+    return {
+      key: `skill:${event.skill}`,
+      label: event.skill,
+      kind: 'skill',
+      kindLabel: skillTarget.label,
+      source: 'skill_invoked',
+    };
   }
   return null;
 }

@@ -4,6 +4,7 @@ import {
   compactPath,
   classifyKnowledgePath,
   extractKnowledgeTarget,
+  extractSkillName,
 } from '../scripts/metrics.mjs';
 import { DEFAULT_KNOWLEDGE_TARGETS } from '../scripts/config.mjs';
 
@@ -141,5 +142,56 @@ describe('extractKnowledgeTarget', () => {
   it('returns null for falsy input', () => {
     expect(extractKnowledgeTarget(null, targets, root)).toBeNull();
     expect(extractKnowledgeTarget('not an event', targets, root)).toBeNull();
+  });
+
+  it('tags skill_invoked events with source="skill_invoked" and keys by skill name', () => {
+    const ev = { event: 'skill_invoked', skill: 'vercel-react-best-practices', args: 'foo' };
+    const out = extractKnowledgeTarget(ev, targets, root);
+    expect(out).toEqual({
+      key: 'skill:vercel-react-best-practices',
+      label: 'vercel-react-best-practices',
+      kind: 'skill',
+      kindLabel: 'Skill',
+      source: 'skill_invoked',
+    });
+  });
+
+  it('returns null for skill_invoked without a skill name', () => {
+    expect(extractKnowledgeTarget({ event: 'skill_invoked' }, targets, root)).toBeNull();
+    expect(extractKnowledgeTarget({ event: 'skill_invoked', skill: '' }, targets, root)).toBeNull();
+  });
+
+  it('returns null for skill_invoked when user omitted the skill target', () => {
+    const noSkillTargets = targets.filter((t) => t.kind !== 'skill');
+    const ev = { event: 'skill_invoked', skill: 'foo' };
+    expect(extractKnowledgeTarget(ev, noSkillTargets, root)).toBeNull();
+  });
+});
+
+describe('skill path classification', () => {
+  const root = '/tmp/proj';
+  const targets = DEFAULT_KNOWLEDGE_TARGETS;
+
+  it('extracts the skill name from a path', () => {
+    expect(extractSkillName('/proj/.claude/skills/deploy/SKILL.md')).toBe('deploy');
+    expect(extractSkillName('/proj/.claude/skills/deploy/rules/foo.md')).toBe('deploy');
+    expect(extractSkillName('/proj/random.md')).toBeNull();
+  });
+
+  it('keys skill reads by skill name regardless of inner file', () => {
+    const skillMd = classifyKnowledgePath('/tmp/proj/.claude/skills/deploy/SKILL.md', targets, root);
+    const ruleFile = classifyKnowledgePath('/tmp/proj/.claude/skills/deploy/rules/advanced-init-once.md', targets, root);
+    expect(skillMd.key).toBe('skill:deploy');
+    expect(ruleFile.key).toBe('skill:deploy');
+    expect(skillMd.kind).toBe('skill');
+    expect(ruleFile.kind).toBe('skill');
+    expect(skillMd.label).toBe('deploy');
+  });
+
+  it('tags inner-file reads with source="tool_read"', () => {
+    const ev = { event: 'tool_read', file: '/tmp/proj/.claude/skills/deploy/rules/advanced-init-once.md' };
+    const out = extractKnowledgeTarget(ev, targets, root);
+    expect(out?.source).toBe('tool_read');
+    expect(out?.key).toBe('skill:deploy');
   });
 });

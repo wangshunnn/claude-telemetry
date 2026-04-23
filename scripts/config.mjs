@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 export const DEFAULT_KNOWLEDGE_TARGETS = [
   { kind: 'doc', label: 'Docs', test: (path) => /\/docs\/.*\.md$/i.test(path) },
   { kind: 'rule', label: 'Rule', test: (path) => /\/\.claude\/rules\/.*\.md$/i.test(path) },
-  { kind: 'skill', label: 'Skill', test: (path) => /\/skills\/.+\/SKILL\.md$/i.test(path) },
+  { kind: 'skill', label: 'Skill', test: (path) => /\/skills\/[^/]+\/.+/i.test(path) },
   {
     kind: 'agents',
     label: 'Agents',

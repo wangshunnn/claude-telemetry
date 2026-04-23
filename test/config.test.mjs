@@ -39,12 +39,17 @@ describe('DEFAULT_KNOWLEDGE_TARGETS', () => {
 
   describe('Skill', () => {
     const skill = byKind('skill');
-    it('matches any skills/<name>/SKILL.md', () => {
+    it('matches SKILL.md entry point', () => {
       expect(skill.test('/proj/.claude/skills/deploy/SKILL.md')).toBe(true);
       expect(skill.test('/proj/plugin/skills/review/SKILL.md')).toBe(true);
     });
-    it('rejects other files inside skills/', () => {
-      expect(skill.test('/proj/skills/deploy/README.md')).toBe(false);
+    it('also matches content files under skills/<name>/', () => {
+      expect(skill.test('/proj/skills/deploy/README.md')).toBe(true);
+      expect(skill.test('/proj/.claude/skills/deploy/rules/advanced-init-once.md')).toBe(true);
+      expect(skill.test('/proj/.claude/skills/deploy/scripts/run.sh')).toBe(true);
+    });
+    it('rejects files directly under skills/ without a named subdir', () => {
+      expect(skill.test('/proj/skills/README.md')).toBe(false);
     });
   });
 

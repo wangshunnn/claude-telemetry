@@ -7,15 +7,14 @@ This repository ships a Claude Code plugin that records hook events, stores them
 ## Project Map
 
 - `.claude-plugin/plugin.json`: Claude Code plugin manifest and user-facing metadata.
-- `hooks/hooks.json`: hook wiring for session, prompt, tool, notification, permission, and stop events.
+- `hooks/hooks.json`: hook wiring for session, prompt (submit + slash-command expansion), tool (including `Skill`), notification, permission, and stop events.
 - `commands/open.md`: `/claude-telemetry:open` command definition.
-- `scripts/append-event.mjs`: generic event collector for most hook types.
+- `scripts/append-event.mjs`: generic event collector for most hook types, including `skill_invoked` from the `Skill` tool and `slash_command` from `UserPromptExpansion` (which is upgraded to `skill_invoked` when the command name resolves to an installed skill under `<project>/.claude/skills/`, `~/.claude/skills/`, or `~/.claude/plugins/*/skills/`).
 - `scripts/on-stop.mjs`: stop-event collector that also parses transcript usage and reply data.
-- `scripts/config.mjs`: default knowledge-target rules plus project-level override loading.
-- `scripts/metrics.mjs`: path normalization and knowledge-target classification helpers.
-- `scripts/build.mjs`: aggregates `events.jsonl` into `snapshot.json` and a standalone HTML dashboard.
-- `scripts/open.mjs`: builds the dashboard and opens it in the local browser.
-- `test/*.test.mjs`: Vitest coverage for classification and config behavior.
+- `scripts/config.mjs`: default knowledge-target rules plus project-level override loading. Skill target matches any file under `**/skills/<name>/**` so SKILL.md, `rules/`, and other inner content all count as the same skill hit.
+- `scripts/metrics.mjs`: path normalization and knowledge-target classification helpers. Skill hits (from reads or `skill_invoked` events) are keyed by `skill:<name>` so both paths aggregate into one target.
+- `scripts/build.mjs`: aggregates `events.jsonl` into `snapshot.json` and a standalone HTML dashboard, applies no-data guards, and prints the generated HTML file URL (or a no-data message).
+- `test/*.test.mjs`: Vitest coverage for classification, config, path resolution, the build/dashboard flow, and the slash-command → skill hook path.
 
 ## Working Agreements
 
