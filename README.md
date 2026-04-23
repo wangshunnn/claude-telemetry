@@ -11,16 +11,36 @@ Per-turn knowledge-base hit-rate telemetry for Claude Code. Collects hook events
 
 The core question it answers: *is my documentation actually being consumed by Claude, or is it sitting in the repo unread?*
 
-## Install (local plugin)
+## Install
+
+Add the marketplace once:
+
+```bash
+/plugin marketplace add wangshunnn/claude-telemetry
+```
+
+Then install the plugin:
+
+```bash
+/plugin install claude-telemetry
+```
+
+If you already have another marketplace that also ships a `claude-telemetry` plugin, use the explicit form instead:
+
+```bash
+/plugin install claude-telemetry@soonwang-plugins
+```
+
+For local development, you can still install directly from a checkout:
 
 ```bash
 # from any project you want to instrument
-claude --plugin-dir ~/mycode/github/claude-telemetry-plugin
+claude --plugin-dir ~/mycode/github/claude-telemetry
 ```
 
 Or add to project settings (`.claude/settings.local.json`):
 ```json
-{ "plugins": { "claude-telemetry": "/absolute/path/to/claude-telemetry-plugin" } }
+{ "plugins": { "claude-telemetry": "/absolute/path/to/claude-telemetry" } }
 ```
 
 Once installed, the plugin's hooks fire automatically. Use Claude in the project for a few turns to populate `events.jsonl`, then run:
@@ -75,7 +95,7 @@ After the plugin runs, telemetry stays out of your repo and lands under:
         └── meta.json      # project bucket metadata
 ```
 
-`<project-bucket>` follows Claude's own `~/.claude/projects/` naming style. For example, `/Users/didi/mycode/github/claude-telemetry-plugin` becomes `-Users-didi-mycode-github-claude-telemetry-plugin`. In the rare case two different paths map to the same bucket name, claude-telemetry appends a short suffix to keep them separate.
+`<project-bucket>` follows Claude's own `~/.claude/projects/` naming style. For example, `/Users/didi/mycode/github/claude-telemetry` becomes `-Users-didi-mycode-github-claude-telemetry`. In the rare case two different paths map to the same bucket name, claude-telemetry appends a short suffix to keep them separate.
 
 ## Schema
 
@@ -113,9 +133,10 @@ Hook payloads include raw `prompt` text, absolute file paths, and permission-req
 ## Layout
 
 ```
-claude-telemetry-plugin/
+claude-telemetry/
 ├── .claude-plugin/
-│   └── plugin.json          # plugin manifest
+│   ├── plugin.json          # plugin manifest
+│   └── marketplace.json     # marketplace catalog
 ├── hooks/
 │   └── hooks.json           # hook wiring — SessionStart, PostToolUse, Stop, …
 ├── commands/

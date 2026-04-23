@@ -5,6 +5,8 @@
   "author": {
     "name": "soonwang"
   },
+  "homepage": "https://github.com/wangshunnn/claude-telemetry",
+  "repository": "https://github.com/wangshunnn/claude-telemetry",
   "keywords": [
     "claude-code",
     "telemetry",

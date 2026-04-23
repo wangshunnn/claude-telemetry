@@ -1,0 +1,34 @@
+{
+  "name": "soonwang-plugins",
+  "owner": {
+    "name": "Soon Wang",
+    "email": "wangshunnn@gmail.com"
+  },
+  "metadata": {
+    "description": "Local-first Claude Code plugins from Soon Wang",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "claude-telemetry",
+      "source": "./",
+      "description": "Per-turn knowledge-base hit-rate telemetry and an offline dashboard for Claude Code.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Soon Wang",
+        "email": "wangshunnn@gmail.com"
+      },
+      "homepage": "https://github.com/wangshunnn/claude-telemetry",
+      "repository": "https://github.com/wangshunnn/claude-telemetry",
+      "license": "MIT",
+      "category": "monitoring",
+      "tags": [
+        "telemetry",
+        "dashboard",
+        "hooks",
+        "observability",
+        "knowledge"
+      ]
+    }
+  ]
+}

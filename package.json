@@ -1,5 +1,5 @@
 {
-  "name": "claude-telemetry-plugin",
+  "name": "claude-telemetry",
   "version": "0.1.0",
   "description": "Telemetry plugin and offline dashboard for Claude Code knowledge usage.",
   "private": true,
@@ -13,8 +13,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:wangshunnn/claude-telemetry-plugin.git"
+    "url": "git+https://github.com/wangshunnn/claude-telemetry.git"
   },
+  "homepage": "https://github.com/wangshunnn/claude-telemetry",
   "scripts": {
     "test": "vitest run"
   },
