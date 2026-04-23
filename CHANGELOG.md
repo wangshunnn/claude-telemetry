@@ -4,6 +4,12 @@ All notable changes to `claude-telemetry` will be documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+## [1.2.0] - 2026-04-23
+
+- Moved context occupancy to the session header and removed per-reply API call counts from the dashboard reply metadata.
+- Removed the hard-coded 200K context-window baseline from dashboard percentages; unknown model windows now show token scale without a percentage.
+- Clarified per-reply token metadata as cumulative turn totals to distinguish it from the session-level context peak.
+
 ## [1.1.2] - 2026-04-23
 
 - Inferred Claude transcript paths from `cwd` and `session_id` when Stop hook input omits `transcript_path`, restoring model, token, and context metadata in more Claude Code runs.

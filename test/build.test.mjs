@@ -167,6 +167,17 @@ describe('build.mjs', () => {
     expect(task.tokens).toEqual({ input: 100, output: 12, cache_read: 50, cache_write: 25 });
     expect(task.maxContextTokens).toBe(175);
     expect(snapshot.metrics.kpi.tokenSampleCount).toBe(1);
+    expect(snapshot.metrics.kpi.contextWindow).toBeNull();
+
+    const html = readFileSync(paths.html, 'utf8');
+    expect(html).toContain('ctx峰值');
+    expect(html).toContain('累计 in');
+    expect(html).toContain('累计 out');
+    expect(html).toContain('未设置上下文窗口基准');
+    expect(html).not.toContain('基准 200K');
+    expect(html).not.toContain('次调用');
+    expect(html).not.toContain("tokenMetaBits.push('ctx");
+    expect(html).not.toContain("contextWindow) || 200000");
   });
 
   it('prints the bilingual no-data message when no telemetry events have been collected yet', () => {

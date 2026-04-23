@@ -32,7 +32,6 @@ const { projectRoot: PROJECT_ROOT, events: EVENTS_PATH, html: OUTPUT_PATH, snaps
 const SNAPSHOT_FILE_NAME = 'snapshot.json';
 const AUTO_REFRESH_MS = 60_000;
 const RECENT_TASK_LIMIT = 50;
-const DEFAULT_CONTEXT_WINDOW = 200_000;
 
 const KNOWLEDGE_TARGET_DEFS = await loadKnowledgeTargets(PROJECT_ROOT);
 
@@ -665,7 +664,7 @@ function computeMetrics(events) {
       peakMaxContextTokens,
       tokenSampleCount: tokenTasks.length,
       totalTokens,
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
+      contextWindow: null,
       totalApprovalCount,
       totalIdleCount,
       approvalTaskCount,
@@ -2145,6 +2144,7 @@ function buildRecentSessionGroups(tasks) {
         tasks: [],
         knowledgeTaskCount: 0,
         totalEventCount: 0,
+        maxContextTokens: 0,
         knowledgeTargets: new Map(),
       });
     }
@@ -2152,6 +2152,7 @@ function buildRecentSessionGroups(tasks) {
     const group = groups.get(sessionId);
     group.tasks.push(task);
     group.totalEventCount += Number(task.eventCount || 0);
+    group.maxContextTokens = Math.max(group.maxContextTokens, Number(task.maxContextTokens || 0));
     if (Number(task.knowledgeCount || 0) > 0) group.knowledgeTaskCount += 1;
     if (!group.latestEnd || String(task.end || '').localeCompare(group.latestEnd) > 0) {
       group.latestEnd = String(task.end || '');
@@ -2184,6 +2185,7 @@ function buildRecentSessionGroups(tasks) {
         taskCount: orderedTasks.length,
         knowledgeTaskCount: group.knowledgeTaskCount,
         totalEventCount: group.totalEventCount,
+        maxContextTokens: group.maxContextTokens,
         displayStart: firstTask.displayStart || formatFull(firstTask.start),
         displayEnd: lastTask.displayEnd || formatFull(lastTask.end),
         latestPrompt: lastTask.prompt || '（空轮次）',
@@ -2232,13 +2234,23 @@ function renderRecentSessions(tasks) {
 
   const sessionGroups = buildRecentSessionGroups(tasks);
   const helper = '<div class="task-helper">说明：这里先按最近活跃的 <code>session_id</code> 分组，再在组内按 <code>#N</code> 正序排列轮次。这样既能先看到“最近有哪些会话活跃”，又不会打乱同一会话里的上下文顺序；其中 <code>session_id#N</code> 里的 <code>#N</code> 表示该会话的第 N 轮。</div>';
+  const contextWindow = runtime.snapshot && runtime.snapshot.metrics && runtime.snapshot.metrics.kpi
+    ? Number(runtime.snapshot.metrics.kpi.contextWindow) || 0
+    : 0;
 
   return helper + '<div class="sessions">' + sessionGroups.map(function (session, sessionIndex) {
+    const sessionContextLabel = contextWindow
+      ? formatTokensN(session.maxContextTokens) + ' / ' + percent(session.maxContextTokens / contextWindow)
+      : formatTokensN(session.maxContextTokens);
+    const sessionContextPill = session.maxContextTokens
+      ? '<span class="pill">ctx峰值 ' + esc(sessionContextLabel) + '</span>'
+      : '';
     const sessionPills = [
       '<span class="pill">' + esc(session.taskCount) + ' 轮次</span>',
       '<span class="pill">' + esc(session.knowledgeTaskCount) + ' 命中轮次</span>',
       '<span class="pill">' + esc(session.totalEventCount) + ' events</span>',
-    ].join('');
+      sessionContextPill,
+    ].filter(Boolean).join('');
 
     const sessionChips = session.knowledgeTargets && session.knowledgeTargets.length
       ? '<div class="doc-chips">' + session.knowledgeTargets.map(function (item) {
@@ -2248,13 +2260,9 @@ function renderRecentSessions(tasks) {
 
     const taskCards = session.tasks.map(function (task) {
       const durationLabel = task.durationLabel || formatDurationMs(task.durationMs);
-      const ctx = task.maxContextTokens || 0;
       const tokens = task.tokens || { input: 0, output: 0, cache_read: 0, cache_write: 0 };
-      const ctxPill = ctx
-        ? '<span class="pill">ctx ' + esc(formatTokensN(ctx)) + '</span>'
-        : '';
       const outputPill = tokens.output
-        ? '<span class="pill">out ' + esc(formatTokensN(tokens.output)) + '</span>'
+        ? '<span class="pill">累计 out ' + esc(formatTokensN(tokens.output)) + '</span>'
         : '';
       const approvalPill = (task.approvalCount || 0) > 0
         ? '<span class="pill is-approval">审批 ' + esc(task.approvalCount) + '</span>'
@@ -2266,7 +2274,6 @@ function renderRecentSessions(tasks) {
         '<span class="pill">' + esc(task.eventCount) + ' events</span>',
         '<span class="pill">' + esc(task.knowledgeCount) + ' 知识命中</span>',
         '<span class="pill">耗时 ' + esc(durationLabel) + '</span>',
-        ctxPill,
         outputPill,
         approvalPill,
         idlePill,
@@ -2279,15 +2286,10 @@ function renderRecentSessions(tasks) {
         : '';
 
       const tokenMetaBits = [];
-      if (ctx) {
-        const winRef = (runtime.snapshot && runtime.snapshot.metrics && runtime.snapshot.metrics.kpi && runtime.snapshot.metrics.kpi.contextWindow) || 200000;
-        tokenMetaBits.push('ctx ' + formatTokensN(ctx) + ' / ' + percent(ctx / winRef));
-      }
-      if (tokens.input) tokenMetaBits.push('in ' + formatTokensN(tokens.input));
-      if (tokens.output) tokenMetaBits.push('out ' + formatTokensN(tokens.output));
-      if (tokens.cache_read) tokenMetaBits.push('cache↘ ' + formatTokensN(tokens.cache_read));
-      if (tokens.cache_write) tokenMetaBits.push('cache↗ ' + formatTokensN(tokens.cache_write));
-      if (task.apiCalls) tokenMetaBits.push(task.apiCalls + ' 次调用');
+      if (tokens.input) tokenMetaBits.push('累计 in ' + formatTokensN(tokens.input));
+      if (tokens.output) tokenMetaBits.push('累计 out ' + formatTokensN(tokens.output));
+      if (tokens.cache_read) tokenMetaBits.push('累计 cache↘ ' + formatTokensN(tokens.cache_read));
+      if (tokens.cache_write) tokenMetaBits.push('累计 cache↗ ' + formatTokensN(tokens.cache_write));
       if (task.model) tokenMetaBits.push(task.model);
       const tokenMeta = tokenMetaBits.length
         ? '<div class="token-meta">' + tokenMetaBits.map(function (b) { return '<span>' + esc(b) + '</span>'; }).join('') + '</div>'
@@ -2372,9 +2374,12 @@ function renderDashboard(snapshot) {
     statCard('知识库调用率', percent(kpi.knowledgeCoverageRate), '公式：命中知识目标的轮次数 / 总轮次数。'),
     statCard('平均耗时', formatDurationMs(kpi.avgDurationMs || 0), (kpi.durationSampleCount || 0) + ' 个已结束轮次 · 最长 ' + formatDurationMs(kpi.maxDurationMs || 0)),
     (function () {
-      const win = kpi.contextWindow || 200000;
+      const win = Number(kpi.contextWindow) || 0;
       const avg = kpi.avgMaxContextTokens || 0;
       const peak = kpi.peakMaxContextTokens || 0;
+      if (!win) {
+        return statCard('平均上下文规模', formatTokensN(avg), (kpi.tokenSampleCount || 0) + ' 个采样 · 峰值 ' + formatTokensN(peak) + ' · 未设置上下文窗口基准');
+      }
       const pct = avg ? percent(avg / win) : '0.0%';
       const peakPct = peak ? percent(peak / win) : '0.0%';
       return statCard('平均上下文占用', formatTokensN(avg) + ' / ' + pct, (kpi.tokenSampleCount || 0) + ' 个采样 · 峰值 ' + formatTokensN(peak) + ' / ' + peakPct + ' · 基准 ' + formatTokensN(win));
