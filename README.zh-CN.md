@@ -1,0 +1,83 @@
+# claude-telemetry
+
+[English](./README.md)
+
+给 Claude Code 用的本地离线遥测插件和自包含仪表盘。它可以帮助你看清每一轮里，哪些文档、规则、技能和 agent 指令真的被读到了。
+
+## 安装
+
+先添加 marketplace：
+
+```bash
+/plugin marketplace add wangshunnn/claude-telemetry
+```
+
+再安装插件：
+
+```bash
+/plugin install claude-telemetry
+```
+
+然后重载一下插件：
+
+```bash
+/reload-plugins
+```
+
+<details>
+<summary>如果安装时遇到同名插件冲突</summary>
+
+请使用带来源的写法：
+
+```bash
+/plugin install claude-telemetry@soonwang-plugins
+```
+
+</details>
+
+## 使用
+
+在项目里正常使用 Claude 几轮后，执行：
+
+```bash
+/claude-telemetry:open
+```
+
+这个命令会为当前项目生成离线仪表盘，并自动在浏览器中打开。
+
+## 更新
+
+```bash
+/plugin marketplace update soonwang-plugins
+/plugin update claude-telemetry
+/reload-plugins
+```
+
+## 截图
+
+<img src="./screenshot/claude-telemetry-preview-1.jpeg" alt="claude-telemetry dashboard" width="800" />
+
+## 工作原理
+
+```text
+[Claude Code 会话] --hooks--> [claude-telemetry 插件: append-event / on-stop] --> [本地 events.jsonl] --/claude-telemetry:open--> [build.mjs -> snapshot.json + index.html] --> [离线仪表盘]
+```
+
+本地接入和实现细节见 [DEVELOPMENT.zh-CN.md](./DEVELOPMENT.zh-CN.md)。
+
+## 你会看到什么
+
+- 每轮对 docs、rules、skills、instruction 文件的命中情况
+- 工具使用、权限申请、idle prompt、tokens 和 API cost
+- 数据默认只保存在本机 `~/.claude/claude-telemetry/`
+- 生成自包含的 `index.html` 和 `snapshot.json`
+
+## 说明
+
+- 遥测内容可能包含原始 prompt、绝对路径和权限命令输入。
+- 输出默认写在仓库外，不会直接落到项目目录里。
+- 发布记录见 [CHANGELOG.md](./CHANGELOG.md)。
+
+## License
+
+MIT — [LICENSE](./LICENSE)
