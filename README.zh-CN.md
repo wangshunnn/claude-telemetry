@@ -58,6 +58,7 @@
 ## 截图
 
 <img src="./screenshot/claude-telemetry-preview-1.jpeg" alt="claude-telemetry dashboard" width="800" />
+<img src="./screenshot/claude-telemetry-preview-2.jpeg" alt="claude-telemetry dashboard" width="800" />
 
 ## 工作原理
 

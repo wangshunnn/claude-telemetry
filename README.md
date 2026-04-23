@@ -58,6 +58,7 @@ You can add `.claude/telemetry/` to the instrumented project's `.gitignore`.
 ## Screenshot
 
 <img src="./screenshot/claude-telemetry-preview-1.jpeg" alt="claude-telemetry dashboard" width="800" />
+<img src="./screenshot/claude-telemetry-preview-2.jpeg" alt="claude-telemetry dashboard" width="800" />
 
 ## How It Works
 
