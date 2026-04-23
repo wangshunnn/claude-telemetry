@@ -76,6 +76,12 @@ const builders = {
     glob: n(i.tool_input?.glob),
     path: n(i.tool_input?.path),
   }),
+  tool_bash: (i) => ({
+    event: 'tool_bash',
+    tool: n(i.tool_name),
+    command: n(i.tool_input?.command),
+    description: n(i.tool_input?.description),
+  }),
   tool_write: (i) => ({
     event: 'tool_write',
     tool: n(i.tool_name),

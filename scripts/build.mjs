@@ -82,6 +82,11 @@ const EVENT_META = {
     shortLabel: 'search',
     color: '#0891b2',
   },
+  tool_bash: {
+    label: 'Bash',
+    shortLabel: 'bash',
+    color: '#475569',
+  },
   tool_write: {
     label: 'Write',
     shortLabel: 'write',
@@ -341,6 +346,10 @@ function summarizeEvent(event) {
     case 'tool_search':
       label = event.tool ? `search:${String(event.tool).toLowerCase()}` : label;
       detail = [event.pattern, event.glob, compactPath(event.path)].filter(Boolean).join(' · ');
+      break;
+    case 'tool_bash':
+      label = 'bash';
+      detail = truncate(event.description || event.command || '', 140);
       break;
     case 'tool_write':
       label = event.tool ? `write:${String(event.tool).toLowerCase()}` : label;

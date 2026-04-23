@@ -60,6 +60,23 @@ describe('build.mjs', () => {
         file: resolve(projectRoot, 'docs', 'guide.md'),
       },
       {
+        ts: '2026-01-01T00:00:02.250Z',
+        session_id: 'session-1',
+        event: 'tool_search',
+        tool: 'Grep',
+        pattern: 'telemetry',
+        glob: '*.md',
+        path: resolve(projectRoot, 'docs'),
+      },
+      {
+        ts: '2026-01-01T00:00:02.500Z',
+        session_id: 'session-1',
+        event: 'tool_bash',
+        tool: 'Bash',
+        command: 'pnpm test',
+        description: 'Run tests',
+      },
+      {
         ts: '2026-01-01T00:00:03.000Z',
         session_id: 'session-1',
         event: 'session_stop',
@@ -87,7 +104,13 @@ describe('build.mjs', () => {
     expect(existsSync(paths.snapshot)).toBe(true);
     expect(existsSync(resolve(projectRoot, '.claude', 'telemetry'))).toBe(true);
     expect(result.stdout.trim()).toBe(pathToFileURL(paths.html).toString());
-    expect(() => JSON.parse(readFileSync(paths.snapshot, 'utf8'))).not.toThrow();
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    expect(snapshot.metrics.recentTasks[0].events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: 'search:grep' }),
+        expect.objectContaining({ label: 'bash', detail: 'Run tests' }),
+      ])
+    );
   });
 
   it('backfills missing token metadata from the local Claude transcript', () => {

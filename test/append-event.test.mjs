@@ -137,3 +137,45 @@ describe('append-event.mjs slash_command', () => {
     expect(existsSync(paths.events)).toBe(false);
   });
 });
+
+describe('append-event.mjs tool events', () => {
+  let sandbox;
+  let projectRoot;
+  let fakeHome;
+
+  beforeEach(() => {
+    sandbox = resolve('/tmp', `claude-tel-tool-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    projectRoot = resolve(sandbox, 'workspace');
+    fakeHome = resolve(sandbox, 'home');
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(fakeHome, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it('captures Bash command metadata', () => {
+    const result = runHook('tool_bash', {
+      session_id: 's1',
+      tool_name: 'Bash',
+      tool_input: {
+        command: 'pnpm test',
+        description: 'Run tests',
+      },
+    }, { projectRoot, home: fakeHome });
+
+    expect(result.status).toBe(0);
+
+    const paths = resolveTelemetryPaths(projectRoot);
+    const events = readEvents(paths);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: 'tool_bash',
+      tool: 'Bash',
+      command: 'pnpm test',
+      description: 'Run tests',
+      session_id: 's1',
+    });
+  });
+});
