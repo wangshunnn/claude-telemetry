@@ -30,7 +30,7 @@ After that, reload plugins:
 Use the explicit source:
 
 ```bash
-/plugin install claude-telemetry@soonwang-plugins
+/plugin install claude-telemetry@claude-telemetry
 ```
 
 </details>
@@ -48,7 +48,7 @@ This builds the current project's offline dashboard and opens it in your browser
 ## Update
 
 ```bash
-/plugin marketplace update soonwang-plugins
+/plugin marketplace update claude-telemetry
 /plugin update claude-telemetry
 /reload-plugins
 ```

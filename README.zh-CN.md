@@ -27,10 +27,10 @@
 <details>
 <summary>如果安装时遇到同名插件冲突</summary>
 
-请使用带来源的写法：
+请使用带来源的写法。当前 marketplace 名也叫 `claude-telemetry`，所以显式安装命令会写成：
 
 ```bash
-/plugin install claude-telemetry@soonwang-plugins
+/plugin install claude-telemetry@claude-telemetry
 ```
 
 </details>
@@ -48,7 +48,7 @@
 ## 更新
 
 ```bash
-/plugin marketplace update soonwang-plugins
+/plugin marketplace update claude-telemetry
 /plugin update claude-telemetry
 /reload-plugins
 ```
