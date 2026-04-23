@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project uses Semantic Versionin
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-04-23
+
+- Restored `last_assistant_message` as a Stop hook fallback when transcript text is unavailable, while keeping transcript as the primary source for reply metadata and token usage.
+
 ## [1.1.0] - 2026-04-23
 
 - Switched the default telemetry storage path to project-local `.claude/telemetry/` so Claude Code plugin commands can write dashboard artifacts without leaving the workspace.

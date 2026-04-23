@@ -5,6 +5,22 @@ import { ensureTelemetryDir } from './paths.mjs';
 
 const MAX_REPLY_LEN = 4000;
 
+function coerceReply(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => coerceReply(item))
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  if (!value || typeof value !== 'object') return '';
+  if (value.type === 'text' && typeof value.text === 'string') return value.text;
+  if (!value.type && typeof value.text === 'string') return value.text;
+  if ('content' in value) return coerceReply(value.content);
+  if (value.message && typeof value.message === 'object') return coerceReply(value.message.content);
+  return '';
+}
+
 async function extractTurnDataFromTranscript(path) {
   const empty = {
     reply: '',
@@ -47,11 +63,9 @@ async function extractTurnDataFromTranscript(path) {
     if (rec.message?.model) out.model = rec.message.model;
     out.apiCalls += 1;
 
-    const texts = (rec.message?.content || [])
-      .filter((c) => c && c.type === 'text' && typeof c.text === 'string')
-      .map((c) => c.text);
-    if (texts.length) {
-      out.reply = texts.join('\n\n');
+    const text = coerceReply(rec.message?.content);
+    if (text) {
+      out.reply = text;
       out.replyTs = rec.timestamp || '';
       out.requestId = rec.requestId || '';
     }
@@ -70,7 +84,9 @@ async function main() {
 
   const turn = await extractTurnDataFromTranscript(input.transcript_path);
 
-  let reply = turn.reply;
+  const fallbackReply = coerceReply(input.last_assistant_message);
+  let reply = turn.reply || fallbackReply;
+  const replySource = turn.reply ? 'transcript' : (fallbackReply ? 'last_assistant_message' : '');
   const truncated = reply.length > MAX_REPLY_LEN;
   if (truncated) reply = reply.slice(0, MAX_REPLY_LEN) + '…';
 
@@ -83,6 +99,7 @@ async function main() {
     reply,
     reply_length: reply.length,
     reply_truncated: truncated,
+    reply_source: replySource,
     reply_ts: turn.replyTs,
     request_id: turn.requestId,
     model: turn.model,
