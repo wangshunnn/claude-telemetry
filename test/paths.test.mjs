@@ -36,8 +36,8 @@ describe('paths', () => {
   });
 
   it('maps unix-style project paths to Claude-style bucket stems', () => {
-    expect(projectBucketStem('/Users/didi/mycode/github/claude-telemetry'))
-      .toBe('-Users-didi-mycode-github-claude-telemetry');
+    expect(projectBucketStem('/Users/mycode/github/claude-telemetry'))
+      .toBe('-Users-mycode-github-claude-telemetry');
   });
 
   it('sanitizes windows drive separators in bucket stems', () => {

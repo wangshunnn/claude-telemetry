@@ -95,7 +95,7 @@ After the plugin runs, telemetry stays out of your repo and lands under:
         └── meta.json      # project bucket metadata
 ```
 
-`<project-bucket>` follows Claude's own `~/.claude/projects/` naming style. For example, `/Users/didi/mycode/github/claude-telemetry` becomes `-Users-didi-mycode-github-claude-telemetry`. In the rare case two different paths map to the same bucket name, claude-telemetry appends a short suffix to keep them separate.
+`<project-bucket>` follows Claude's own `~/.claude/projects/` naming style. For example, `/Users/mycode/github/claude-telemetry` becomes `-Users-mycode-github-claude-telemetry`. In the rare case two different paths map to the same bucket name, claude-telemetry appends a short suffix to keep them separate.
 
 ## Schema
 
