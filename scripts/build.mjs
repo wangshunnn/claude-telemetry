@@ -15,6 +15,13 @@ import { pathToFileURL } from 'node:url';
 import { ensureTelemetryDir } from './paths.mjs';
 import { loadKnowledgeTargets } from './config.mjs';
 import {
+  MAX_REPLY_LEN,
+  extractTurnDataFromTranscriptRecords,
+  hasTurnData,
+  loadTranscriptRecords,
+  transcriptPathForSession,
+} from './transcript-turn.mjs';
+import {
   shortenHome,
   compactPath as _compactPath,
   classifyKnowledgePath as _classifyKnowledgePath,
@@ -162,6 +169,74 @@ function tsToMs(ts) {
   if (!ts) return NaN;
   const ms = Date.parse(ts);
   return Number.isFinite(ms) ? ms : NaN;
+}
+
+function stopEventNeedsTranscriptBackfill(event) {
+  if (event?.event !== 'session_stop') return false;
+  const tokens = event.tokens || {};
+  const hasTokenMeta = Boolean(
+    event.model ||
+    Number(event.api_calls) ||
+    Number(event.max_context_tokens) ||
+    Number(tokens.input) ||
+    Number(tokens.output) ||
+    Number(tokens.cache_read) ||
+    Number(tokens.cache_write)
+  );
+  return !hasTokenMeta || !(typeof event.reply === 'string' && event.reply.length);
+}
+
+function mergeTranscriptBackfill(event, turn) {
+  if (!hasTurnData(turn)) return event;
+  const next = { ...event };
+  if (!(typeof next.reply === 'string' && next.reply.length) && turn.reply) {
+    const truncated = turn.reply.length > MAX_REPLY_LEN;
+    next.reply = truncated ? turn.reply.slice(0, MAX_REPLY_LEN) + '…' : turn.reply;
+    next.reply_length = next.reply.length;
+    next.reply_truncated = truncated;
+    next.reply_source = 'transcript_backfill';
+  }
+  if (!next.reply_ts && turn.replyTs) next.reply_ts = turn.replyTs;
+  if (!next.request_id && turn.requestId) next.request_id = turn.requestId;
+  if (!next.model && turn.model) next.model = turn.model;
+  if (!Number(next.api_calls) && turn.apiCalls) next.api_calls = turn.apiCalls;
+  if (!Number(next.max_context_tokens) && turn.maxContextTokens) {
+    next.max_context_tokens = turn.maxContextTokens;
+  }
+  const tokens = next.tokens || {};
+  const hasTokens = Boolean(
+    Number(tokens.input) ||
+    Number(tokens.output) ||
+    Number(tokens.cache_read) ||
+    Number(tokens.cache_write)
+  );
+  if (!hasTokens) next.tokens = turn.tokens;
+  if (!next.transcript_source) next.transcript_source = 'build_backfill';
+  return next;
+}
+
+async function backfillEventsFromTranscripts(events) {
+  const cwdBySession = new Map();
+  const transcriptCache = new Map();
+  const out = [];
+
+  for (const event of events) {
+    const sessionId = event.session_id || '';
+    if (event.event === 'session_start' && event.cwd && sessionId) {
+      cwdBySession.set(sessionId, event.cwd);
+    }
+    if (!stopEventNeedsTranscriptBackfill(event)) {
+      out.push(event);
+      continue;
+    }
+
+    const transcriptPath = transcriptPathForSession(sessionId, cwdBySession.get(sessionId) || PROJECT_ROOT);
+    const records = await loadTranscriptRecords(transcriptPath, transcriptCache);
+    const turn = extractTurnDataFromTranscriptRecords(records, event.ts);
+    out.push(mergeTranscriptBackfill(event, turn));
+  }
+
+  return out;
 }
 
 function formatDuration(ms) {
@@ -2552,7 +2627,8 @@ if (eventsFileIsEmpty()) {
 }
 
 const { events, malformed } = await loadEvents();
-const snapshot = buildSnapshot(events, malformed);
+const enrichedEvents = await backfillEventsFromTranscripts(events);
+const snapshot = buildSnapshot(enrichedEvents, malformed);
 
 writeFileSync(SNAPSHOT_PATH, JSON.stringify(snapshot, null, 2));
 writeFileSync(OUTPUT_PATH, renderHtml(snapshot));

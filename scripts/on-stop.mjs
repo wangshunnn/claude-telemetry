@@ -1,76 +1,36 @@
 #!/usr/bin/env node
-import { appendFileSync, createReadStream, existsSync, readFileSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { ensureTelemetryDir } from './paths.mjs';
+import {
+  MAX_REPLY_LEN,
+  coerceReply,
+  emptyTurnData,
+  extractTurnDataFromTranscript,
+  hasTurnData,
+  transcriptCandidates,
+} from './transcript-turn.mjs';
 
-const MAX_REPLY_LEN = 4000;
+const TRANSCRIPT_RETRY_ATTEMPTS = 5;
+const TRANSCRIPT_RETRY_DELAY_MS = 75;
 
-function coerceReply(value) {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => coerceReply(item))
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  if (!value || typeof value !== 'object') return '';
-  if (value.type === 'text' && typeof value.text === 'string') return value.text;
-  if (!value.type && typeof value.text === 'string') return value.text;
-  if ('content' in value) return coerceReply(value.content);
-  if (value.message && typeof value.message === 'object') return coerceReply(value.message.content);
-  return '';
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
-async function extractTurnDataFromTranscript(path) {
-  const empty = {
-    reply: '',
-    replyTs: '',
-    requestId: '',
-    model: '',
-    tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-    maxContextTokens: 0,
-    apiCalls: 0,
-  };
-  if (!path || !existsSync(path)) return empty;
+async function extractTurnData(input) {
+  const candidates = transcriptCandidates(input);
+  if (!candidates.length) return emptyTurnData();
 
-  const rl = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
-  let assistantBuf = [];
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    let rec;
-    try { rec = JSON.parse(line); } catch { continue; }
-    if (rec.isSidechain) continue;
-    if (rec.type === 'user' && rec.promptId && !rec.isMeta) {
-      assistantBuf = [];
-      continue;
+  let best = emptyTurnData();
+  for (let attempt = 0; attempt < TRANSCRIPT_RETRY_ATTEMPTS; attempt += 1) {
+    for (const candidate of candidates) {
+      const turn = await extractTurnDataFromTranscript(candidate.path);
+      if (hasTurnData(turn)) return { ...turn, transcriptSource: candidate.source };
+      best = turn;
     }
-    if (rec.type === 'assistant') assistantBuf.push(rec);
+    if (attempt < TRANSCRIPT_RETRY_ATTEMPTS - 1) await sleep(TRANSCRIPT_RETRY_DELAY_MS);
   }
-
-  const out = { ...empty, tokens: { ...empty.tokens } };
-  for (const rec of assistantBuf) {
-    const u = rec.message?.usage || {};
-    const inT = Number(u.input_tokens) || 0;
-    const cwT = Number(u.cache_creation_input_tokens) || 0;
-    const crT = Number(u.cache_read_input_tokens) || 0;
-    const outT = Number(u.output_tokens) || 0;
-    out.tokens.input += inT;
-    out.tokens.output += outT;
-    out.tokens.cache_read += crT;
-    out.tokens.cache_write += cwT;
-    const ctx = inT + cwT + crT;
-    if (ctx > out.maxContextTokens) out.maxContextTokens = ctx;
-    if (rec.message?.model) out.model = rec.message.model;
-    out.apiCalls += 1;
-
-    const text = coerceReply(rec.message?.content);
-    if (text) {
-      out.reply = text;
-      out.replyTs = rec.timestamp || '';
-      out.requestId = rec.requestId || '';
-    }
-  }
-  return out;
+  return best;
 }
 
 async function main() {
@@ -82,7 +42,7 @@ async function main() {
   const hookName = input.hook_event_name || 'Stop';
   const isFailure = hookName === 'StopFailure' || Boolean(input.error || input.error_details);
 
-  const turn = await extractTurnDataFromTranscript(input.transcript_path);
+  const turn = await extractTurnData(input);
 
   const fallbackReply = coerceReply(input.last_assistant_message);
   let reply = turn.reply || fallbackReply;
@@ -106,6 +66,7 @@ async function main() {
     api_calls: turn.apiCalls,
     tokens: turn.tokens,
     max_context_tokens: turn.maxContextTokens,
+    transcript_source: turn.transcriptSource,
   };
   if (isFailure) {
     if (input.error) event.error = input.error;

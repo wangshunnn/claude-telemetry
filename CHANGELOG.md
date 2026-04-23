@@ -4,7 +4,12 @@ All notable changes to `claude-telemetry` will be documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
-## [Unreleased]
+## [1.1.2] - 2026-04-23
+
+- Inferred Claude transcript paths from `cwd` and `session_id` when Stop hook input omits `transcript_path`, restoring model, token, and context metadata in more Claude Code runs.
+- Added a short transcript retry window in the Stop hook to tolerate transcript flush timing.
+- Deduplicated repeated usage rows for split assistant messages and kept pre-tool-result assistant calls in the same user turn.
+- Backfilled missing Stop token/model metadata from local transcripts while building the dashboard, so older zero-metadata events can recover on the next `/claude-telemetry:open`.
 
 ## [1.1.1] - 2026-04-23
 

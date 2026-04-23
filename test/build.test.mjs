@@ -3,16 +3,17 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ensureTelemetryDir, resolveTelemetryPaths } from '../scripts/paths.mjs';
+import { ensureTelemetryDir, projectBucketStem, resolveTelemetryPaths } from '../scripts/paths.mjs';
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TEST_DIR, '..');
 
-function runBuild(projectRoot) {
+function runBuild(projectRoot, extraEnv = {}) {
   return spawnSync(process.execPath, ['scripts/build.mjs'], {
     cwd: REPO_ROOT,
     env: {
       ...process.env,
+      ...extraEnv,
       CLAUDE_PROJECT_DIR: projectRoot,
     },
     encoding: 'utf8',
@@ -87,6 +88,85 @@ describe('build.mjs', () => {
     expect(existsSync(resolve(projectRoot, '.claude', 'telemetry'))).toBe(true);
     expect(result.stdout.trim()).toBe(pathToFileURL(paths.html).toString());
     expect(() => JSON.parse(readFileSync(paths.snapshot, 'utf8'))).not.toThrow();
+  });
+
+  it('backfills missing token metadata from the local Claude transcript', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+    const fakeHome = resolve(sandbox, 'home');
+    const sessionId = 'session-1';
+    const transcriptDir = resolve(fakeHome, '.claude', 'projects', projectBucketStem(projectRoot));
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(resolve(transcriptDir, `${sessionId}.jsonl`), [
+      JSON.stringify({
+        type: 'user',
+        promptId: 'prompt-1',
+        message: { role: 'user', content: 'What skills are available?' },
+        timestamp: '2026-01-01T00:00:01.000Z',
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-01-01T00:00:02.000Z',
+        message: {
+          id: 'msg-1',
+          role: 'assistant',
+          model: 'claude-test',
+          content: [{ type: 'text', text: 'Skill list' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 12,
+            cache_read_input_tokens: 50,
+            cache_creation_input_tokens: 25,
+          },
+        },
+      }),
+    ].join('\n') + '\n');
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: sessionId,
+        event: 'session_start',
+        cwd: projectRoot,
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: sessionId,
+        event: 'user_prompt',
+        prompt: 'What skills are available?',
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: sessionId,
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'Fallback reply',
+        reply_length: 14,
+        reply_truncated: false,
+        reply_source: 'last_assistant_message',
+        reply_ts: '',
+        request_id: '',
+        model: '',
+        api_calls: 0,
+        tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 0,
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot, { HOME: fakeHome });
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    const [task] = snapshot.metrics.recentTasks;
+    expect(task.reply).toBe('Fallback reply');
+    expect(task.model).toBe('claude-test');
+    expect(task.apiCalls).toBe(1);
+    expect(task.tokens).toEqual({ input: 100, output: 12, cache_read: 50, cache_write: 25 });
+    expect(task.maxContextTokens).toBe(175);
+    expect(snapshot.metrics.kpi.tokenSampleCount).toBe(1);
   });
 
   it('prints the bilingual no-data message when no telemetry events have been collected yet', () => {
