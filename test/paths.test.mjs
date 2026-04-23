@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ensureTelemetryDir,
@@ -17,22 +16,27 @@ function readJson(path) {
 
 describe('paths', () => {
   let sandbox;
-  let homeDir;
-  let telemetryRoot;
+  let sharedRoot;
 
   beforeEach(() => {
-    sandbox = resolve(tmpdir(), `claude-tel-paths-${process.pid}-${Math.random().toString(36).slice(2)}`);
-    homeDir = resolve(sandbox, 'home');
-    telemetryRoot = resolveTelemetryRoot(homeDir);
-    mkdirSync(homeDir, { recursive: true });
+    sandbox = resolve('/tmp', `claude-tel-paths-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    sharedRoot = resolve(sandbox, 'shared-telemetry');
+    delete process.env.CLAUDE_TELEMETRY_ROOT;
+    mkdirSync(sharedRoot, { recursive: true });
   });
 
   afterEach(() => {
+    delete process.env.CLAUDE_TELEMETRY_ROOT;
     rmSync(sandbox, { recursive: true, force: true });
   });
 
-  it('resolves the global telemetry root under ~/.claude/claude-telemetry', () => {
-    expect(resolveTelemetryRoot('/tmp/example-home')).toBe('/tmp/example-home/.claude/claude-telemetry');
+  it('resolves the default telemetry root inside the project', () => {
+    expect(resolveTelemetryRoot('/tmp/example-project')).toBe('/tmp/example-project/.claude/telemetry');
+  });
+
+  it('resolves a custom telemetry root from CLAUDE_TELEMETRY_ROOT', () => {
+    process.env.CLAUDE_TELEMETRY_ROOT = '../shared-output';
+    expect(resolveTelemetryRoot('/tmp/example-project')).toBe('/tmp/shared-output');
   });
 
   it('maps unix-style project paths to Claude-style bucket stems', () => {
@@ -46,8 +50,8 @@ describe('paths', () => {
 
   it('returns a stable bucket name for the same project', () => {
     const projectRoot = resolve(sandbox, 'workspace', 'demo');
-    const first = projectBucketName(projectRoot, telemetryRoot);
-    const second = projectBucketName(projectRoot, telemetryRoot);
+    const first = projectBucketName(projectRoot, sharedRoot);
+    const second = projectBucketName(projectRoot, sharedRoot);
     expect(first).toBe(projectBucketStem(projectRoot));
     expect(second).toBe(first);
   });
@@ -56,38 +60,47 @@ describe('paths', () => {
     const projectA = resolve(sandbox, 'my-code', 'foo');
     const projectB = resolve(sandbox, 'my', 'code-foo');
     const baseBucket = projectBucketStem(projectA);
-    const basePaths = resolveTelemetryPaths(projectA, telemetryRoot);
+    const basePaths = resolveTelemetryPaths(projectA, sharedRoot);
 
     ensureTelemetryDir(basePaths);
 
-    const bucket = projectBucketName(projectB, telemetryRoot);
+    const bucket = projectBucketName(projectB, sharedRoot);
     const expectedHash = createHash('sha1').update(projectB).digest('hex').slice(0, 8);
 
     expect(baseBucket).toBe(projectBucketStem(projectB));
     expect(bucket).toBe(`${baseBucket}--${expectedHash}`);
   });
 
-  it('writes events, outputs, and meta.json into the global project bucket', () => {
+  it('writes events and dashboard outputs into the project-local telemetry directory by default', () => {
     const projectRoot = resolve(sandbox, 'workspace', 'demo-app');
-    const paths = resolveTelemetryPaths(projectRoot, telemetryRoot);
+    const paths = resolveTelemetryPaths(projectRoot);
+
+    ensureTelemetryDir(paths);
+
+    expect(paths.dir).toBe(resolve(projectRoot, '.claude', 'telemetry'));
+    expect(paths.events).toBe(resolve(paths.dir, 'events.jsonl'));
+    expect(paths.html).toBe(resolve(paths.dir, 'index.html'));
+    expect(paths.snapshot).toBe(resolve(paths.dir, 'snapshot.json'));
+    expect(paths.bucketName).toBeNull();
+    expect(paths.meta).toBeNull();
+  });
+
+  it('writes into a shared project bucket when a custom telemetry root is provided', () => {
+    const projectRoot = resolve(sandbox, 'workspace', 'demo-app');
+    const paths = resolveTelemetryPaths(projectRoot, sharedRoot);
 
     ensureTelemetryDir(paths);
 
     const meta = readJson(paths.meta);
-    expect(paths.dir).toBe(resolve(telemetryRoot, 'projects', paths.bucketName));
-    expect(paths.events).toBe(resolve(paths.dir, 'events.jsonl'));
-    expect(paths.html).toBe(resolve(paths.dir, 'index.html'));
-    expect(paths.snapshot).toBe(resolve(paths.dir, 'snapshot.json'));
-    expect(meta.projectRoot).toBe(projectRoot);
+    expect(paths.dir).toBe(resolve(sharedRoot, 'projects', paths.bucketName));
     expect(meta.bucketName).toBe(paths.bucketName);
-    expect(meta.projectName).toBe(basename(projectRoot));
-    expect(typeof meta.createdAt).toBe('string');
-    expect(typeof meta.lastSeenAt).toBe('string');
+    expect(meta.storageMode).toBe('shared');
+    expect(meta.telemetryRoot).toBe(sharedRoot);
   });
 
-  it('preserves createdAt when refreshing project metadata', () => {
+  it('preserves createdAt when refreshing shared project metadata', () => {
     const projectRoot = resolve(sandbox, 'workspace', 'demo-app');
-    const paths = resolveTelemetryPaths(projectRoot, telemetryRoot);
+    const paths = resolveTelemetryPaths(projectRoot, sharedRoot);
 
     ensureTelemetryDir(paths);
     const first = readJson(paths.meta);
@@ -96,6 +109,6 @@ describe('paths', () => {
 
     expect(second.createdAt).toBe(first.createdAt);
     expect(second.projectRoot).toBe(first.projectRoot);
-    expect(second.bucketName).toBe(first.bucketName);
+    expect(second.storageMode).toBe(first.storageMode);
   });
 });

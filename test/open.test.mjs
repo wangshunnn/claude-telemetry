@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -8,12 +8,12 @@ import { ensureTelemetryDir, resolveTelemetryPaths } from '../scripts/paths.mjs'
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TEST_DIR, '..');
 
-describe('build.mjs', () => {
+describe('open.mjs', () => {
   let sandbox;
   let projectRoot;
 
   beforeEach(() => {
-    sandbox = resolve('/tmp', `claude-tel-build-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    sandbox = resolve('/tmp', `claude-tel-open-${process.pid}-${Math.random().toString(36).slice(2)}`);
     projectRoot = resolve(sandbox, 'workspace', 'sample-project');
     mkdirSync(resolve(projectRoot, 'docs'), { recursive: true });
     delete process.env.CLAUDE_TELEMETRY_ROOT;
@@ -24,7 +24,24 @@ describe('build.mjs', () => {
     rmSync(sandbox, { recursive: true, force: true });
   });
 
-  it('builds dashboard artifacts in the project-local telemetry directory by default', () => {
+  it('exits with guidance when no telemetry events have been collected yet', () => {
+    const result = spawnSync(process.execPath, ['scripts/open.mjs'], {
+      cwd: REPO_ROOT,
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: projectRoot,
+      },
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('[claude-telemetry] status=no-events');
+    expect(result.stdout).toContain('[claude-telemetry] no events yet');
+    expect(result.stdout).toContain('Try again after at least one turn');
+    expect(result.stderr).toBe('');
+  });
+
+  it('returns success with a manual-open path when the browser launcher is unavailable', () => {
     const paths = resolveTelemetryPaths(projectRoot);
     ensureTelemetryDir(paths);
 
@@ -44,12 +61,6 @@ describe('build.mjs', () => {
       {
         ts: '2026-01-01T00:00:02.000Z',
         session_id: 'session-1',
-        event: 'tool_read',
-        file: resolve(projectRoot, 'docs', 'guide.md'),
-      },
-      {
-        ts: '2026-01-01T00:00:03.000Z',
-        session_id: 'session-1',
         event: 'session_stop',
         stop_status: 'success',
         source_hook: 'Stop',
@@ -67,20 +78,21 @@ describe('build.mjs', () => {
 
     writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
 
-    const result = spawnSync(process.execPath, ['scripts/build.mjs'], {
+    const result = spawnSync(process.execPath, ['scripts/open.mjs'], {
       cwd: REPO_ROOT,
       env: {
         ...process.env,
         CLAUDE_PROJECT_DIR: projectRoot,
+        PATH: '/definitely-missing-path',
       },
       encoding: 'utf8',
     });
 
     expect(result.status).toBe(0);
-    expect(paths.meta).toBeNull();
     expect(existsSync(paths.html)).toBe(true);
-    expect(existsSync(paths.snapshot)).toBe(true);
-    expect(existsSync(resolve(projectRoot, '.claude', 'telemetry'))).toBe(true);
-    expect(() => JSON.parse(readFileSync(paths.snapshot, 'utf8'))).not.toThrow();
+    expect(result.stdout).toContain('[claude-telemetry] status=manual-open');
+    expect(result.stdout).toContain('dashboard built, but failed to launch browser');
+    expect(result.stdout).toContain(`open manually: ${paths.html}`);
+    expect(result.stderr).toBe('');
   });
 });

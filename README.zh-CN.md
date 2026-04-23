@@ -9,7 +9,7 @@
 先添加 marketplace：
 
 ```bash
-/plugin marketplace add wangshunnn/claude-telemetry
+/plugin market add wangshunnn/claude-telemetry
 ```
 
 再安装插件：
@@ -27,7 +27,7 @@
 <details>
 <summary>如果安装时遇到同名插件冲突</summary>
 
-请使用带来源的写法。当前 marketplace 名也叫 `claude-telemetry`，所以显式安装命令会写成：
+请使用带来源的写法。当前 market 名也叫 `claude-telemetry`，所以显式安装命令会写成：
 
 ```bash
 /plugin install claude-telemetry@claude-telemetry
@@ -37,7 +37,7 @@
 
 ## 使用
 
-在项目里正常使用 Claude 几轮后，执行：
+安装后，遥测会从新的对话开始采集。先在项目里正常使用 Claude 几轮，再打开看板：
 
 ```bash
 /claude-telemetry:open
@@ -45,10 +45,12 @@
 
 这个命令会为当前项目生成离线仪表盘，并自动在浏览器中打开。
 
+建议把 `.claude/telemetry/` 加进被观测项目自己的 `.gitignore`。
+
 ## 更新
 
 ```bash
-/plugin marketplace update claude-telemetry
+/plugin market update claude-telemetry
 /plugin update claude-telemetry
 /reload-plugins
 ```
@@ -69,13 +71,14 @@
 
 - 每轮对 docs、rules、skills、instruction 文件的命中情况
 - 工具使用、权限申请、idle prompt、tokens 和 API cost
-- 数据默认只保存在本机 `~/.claude/claude-telemetry/`
+- 数据默认保存在当前项目的 `.claude/telemetry/`
 - 生成自包含的 `index.html` 和 `snapshot.json`
 
 ## 说明
 
 - 遥测内容可能包含原始 prompt、绝对路径和权限命令输入。
-- 输出默认写在仓库外，不会直接落到项目目录里。
+- 输出默认写在当前项目里，这样 Claude Code 执行插件命令时不会越出工作区写入边界。
+- 只有在你明确想把多个项目的遥测集中到同一个目录时，才需要设置 `CLAUDE_TELEMETRY_ROOT`。
 - 发布记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## License

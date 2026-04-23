@@ -1,3 +1,4 @@
 node_modules/
+.claude/telemetry/
 .DS_Store
 *.log

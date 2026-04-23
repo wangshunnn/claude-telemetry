@@ -1,14 +1,17 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 
 export function resolveProjectRoot() {
   return resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
 }
 
-export function resolveTelemetryRoot(home = homedir()) {
-  return resolve(home, '.claude', 'claude-telemetry');
+export function resolveTelemetryRoot(projectRoot = resolveProjectRoot()) {
+  const normalizedRoot = resolve(projectRoot);
+  const override = process.env.CLAUDE_TELEMETRY_ROOT;
+  return override
+    ? resolve(normalizedRoot, override)
+    : resolve(normalizedRoot, '.claude', 'telemetry');
 }
 
 export function projectBucketStem(projectRoot) {
@@ -72,22 +75,32 @@ export function projectBucketName(projectRoot = resolveProjectRoot(), telemetryR
 
 export function resolveTelemetryPaths(
   projectRoot = resolveProjectRoot(),
-  telemetryRoot = resolveTelemetryRoot()
+  telemetryRoot = resolveTelemetryRoot(projectRoot)
 ) {
   const normalizedRoot = resolve(projectRoot);
-  const projectsDir = resolve(telemetryRoot, 'projects');
-  const bucketName = projectBucketName(normalizedRoot, telemetryRoot);
-  const dir = resolve(projectsDir, bucketName);
+  const normalizedTelemetryRoot = resolve(telemetryRoot);
+  const localTelemetryRoot = resolve(normalizedRoot, '.claude', 'telemetry');
+  const useSharedBuckets = normalizedTelemetryRoot !== localTelemetryRoot;
+  const projectsDir = useSharedBuckets
+    ? resolve(normalizedTelemetryRoot, 'projects')
+    : normalizedTelemetryRoot;
+  const bucketName = useSharedBuckets
+    ? projectBucketName(normalizedRoot, normalizedTelemetryRoot)
+    : null;
+  const dir = useSharedBuckets
+    ? resolve(projectsDir, bucketName)
+    : normalizedTelemetryRoot;
   return {
     projectRoot: normalizedRoot,
-    telemetryRoot,
+    telemetryRoot: normalizedTelemetryRoot,
+    storageMode: useSharedBuckets ? 'shared' : 'project',
     projectsDir,
     bucketName,
     dir,
     events: resolve(dir, 'events.jsonl'),
     html: resolve(dir, 'index.html'),
     snapshot: resolve(dir, 'snapshot.json'),
-    meta: resolve(dir, 'meta.json'),
+    meta: useSharedBuckets ? resolve(dir, 'meta.json') : null,
   };
 }
 
@@ -95,22 +108,27 @@ export function ensureTelemetryDir(paths = resolveTelemetryPaths()) {
   try {
     mkdirSync(paths.projectsDir, { recursive: true });
     mkdirSync(paths.dir, { recursive: true });
-    writeProjectMeta(paths);
+    if (paths.storageMode === 'shared') {
+      writeProjectMeta(paths);
+    }
   } catch {}
   return paths;
 }
 
 export function writeProjectMeta(paths = resolveTelemetryPaths()) {
+  if (paths.storageMode !== 'shared' || !paths.meta) return null;
   const now = new Date().toISOString();
   const current = readProjectMeta(paths.meta);
   const projectName = basename(paths.projectRoot) || paths.projectRoot;
   const next = {
     projectRoot: paths.projectRoot,
-    bucketName: paths.bucketName,
     projectName,
+    storageMode: paths.storageMode,
+    telemetryRoot: paths.telemetryRoot,
     createdAt: typeof current?.createdAt === 'string' && current.createdAt ? current.createdAt : now,
     lastSeenAt: now,
   };
+  if (paths.bucketName) next.bucketName = paths.bucketName;
   writeFileSync(paths.meta, JSON.stringify(next, null, 2) + '\n');
   return next;
 }

@@ -9,7 +9,7 @@ Offline telemetry and a self-contained dashboard for Claude Code. It helps you s
 Add the marketplace once:
 
 ```bash
-/plugin marketplace add wangshunnn/claude-telemetry
+/plugin market add wangshunnn/claude-telemetry
 ```
 
 Then install the plugin:
@@ -37,7 +37,7 @@ Use the explicit source:
 
 ## Use
 
-Use Claude in your project for a few turns, then run:
+After installation, telemetry starts collecting from new turns. Use Claude in your project for a few turns, then open the dashboard:
 
 ```bash
 /claude-telemetry:open
@@ -45,10 +45,12 @@ Use Claude in your project for a few turns, then run:
 
 This builds the current project's offline dashboard and opens it in your browser.
 
+You can add `.claude/telemetry/` to the instrumented project's `.gitignore`.
+
 ## Update
 
 ```bash
-/plugin marketplace update claude-telemetry
+/plugin market update claude-telemetry
 /plugin update claude-telemetry
 /reload-plugins
 ```
@@ -69,13 +71,14 @@ For local integration and implementation details, see [DEVELOPMENT.md](./DEVELOP
 
 - Per-turn knowledge hit rate for docs, rules, skills, and instruction files
 - Tool usage, permission requests, idle prompts, tokens, and API cost
-- Local-only storage under `~/.claude/claude-telemetry/`
+- Project-local storage under `.claude/telemetry/` by default
 - Self-contained `index.html` and `snapshot.json`
 
 ## Notes
 
 - Telemetry can include raw prompts, absolute file paths, and permission command inputs.
-- Output is written outside your repo by default.
+- Output stays inside the current project by default, which keeps Claude Code plugin commands within the workspace write boundary.
+- Set `CLAUDE_TELEMETRY_ROOT` only if you explicitly want a shared telemetry directory outside the project.
 - Release notes live in [CHANGELOG.md](./CHANGELOG.md).
 
 ## License

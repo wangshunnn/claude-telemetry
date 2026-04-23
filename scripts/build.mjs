@@ -3,9 +3,10 @@
  * claude-telemetry dashboard generator
  *
  * Usage: node build.mjs
- *   Reads  ~/.claude/claude-telemetry/projects/<bucket>/events.jsonl
- *   Writes ~/.claude/claude-telemetry/projects/<bucket>/index.html
- *   Writes ~/.claude/claude-telemetry/projects/<bucket>/snapshot.json
+ *   Reads  <project>/.claude/telemetry/events.jsonl by default
+ *   Writes <project>/.claude/telemetry/index.html by default
+ *   Writes <project>/.claude/telemetry/snapshot.json by default
+ *   Set CLAUDE_TELEMETRY_ROOT to use a custom shared root instead.
  */
 
 import { createReadStream, existsSync, writeFileSync } from 'node:fs';
