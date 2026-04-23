@@ -3,9 +3,9 @@
  * claude-telemetry dashboard generator
  *
  * Usage: node build.mjs
- *   Reads  $CLAUDE_PROJECT_DIR/.claude/telemetry/events.jsonl
- *   Writes $CLAUDE_PROJECT_DIR/.claude/telemetry/index.html
- *   Writes $CLAUDE_PROJECT_DIR/.claude/telemetry/snapshot.json
+ *   Reads  ~/.claude/claude-telemetry/projects/<bucket>/events.jsonl
+ *   Writes ~/.claude/claude-telemetry/projects/<bucket>/index.html
+ *   Writes ~/.claude/claude-telemetry/projects/<bucket>/snapshot.json
  */
 
 import { createReadStream, existsSync, writeFileSync } from 'node:fs';

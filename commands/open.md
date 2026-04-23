@@ -1,5 +1,5 @@
 ---
-description: Build and open the claude-telemetry dashboard for the current project. Generates .claude/telemetry/index.html from events.jsonl, then opens it in the browser.
+description: Build and open the claude-telemetry dashboard for the current project. Generates the current project's global telemetry dashboard from events.jsonl, then opens it in the browser.
 allowed-tools: Bash
 ---
 

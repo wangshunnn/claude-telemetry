@@ -1,11 +1,25 @@
 {
   "name": "claude-telemetry-plugin",
+  "version": "0.1.0",
+  "description": "Telemetry plugin and offline dashboard for Claude Code knowledge usage.",
   "private": true,
   "author": "Soon Wang <wangshunnn@gmail.com>",
-  "packageManager": "pnpm@10.33.0",
+  "keywords": [
+    "claude-code",
+    "telemetry",
+    "observability",
+    "dashboard",
+    "hooks"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:wangshunnn/claude-telemetry-plugin.git"
+  },
   "scripts": {
     "test": "vitest run"
   },
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
   "devDependencies": {
     "vitest": "^2.1.0"
   }

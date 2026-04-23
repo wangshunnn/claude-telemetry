@@ -1,6 +1,6 @@
 # claude-telemetry
 
-Per-turn knowledge-base hit-rate telemetry for Claude Code. Collects hook events into `.claude/telemetry/events.jsonl` in your project, renders a self-contained offline HTML dashboard, and ships both as a Claude Code plugin.
+Per-turn knowledge-base hit-rate telemetry for Claude Code. Collects hook events into a global `~/.claude/claude-telemetry/projects/<project-bucket>/events.jsonl`, renders a self-contained offline HTML dashboard, and ships both as a Claude Code plugin.
 
 ## What it measures
 
@@ -29,7 +29,7 @@ Once installed, the plugin's hooks fire automatically. Use Claude in the project
 /claude-telemetry:open
 ```
 
-The command builds `.claude/telemetry/index.html` + `snapshot.json` and opens the dashboard in your browser.
+The command builds the current project's global `index.html` + `snapshot.json` and opens the dashboard in your browser.
 
 ## Config (optional)
 
@@ -61,23 +61,21 @@ export const knowledgeTargets = [
 
 Each target needs `kind` (string id), `label` (display name), and `test` — a function receiving `(path, ctx)` where `ctx.projectRoot` is the current project root (use it to exclude files at a specific location). Invalid entries are skipped with a warning.
 
-## Files in your project
+## Files on disk
 
-After the plugin runs, you'll see:
+After the plugin runs, telemetry stays out of your repo and lands under:
 
 ```
-.claude/telemetry/
-├── events.jsonl     # raw append-only event stream (gitignore recommended)
-├── index.html       # dashboard (gitignore recommended)
-└── snapshot.json    # aggregate, for static-site sync (gitignore recommended)
+~/.claude/claude-telemetry/
+└── projects/
+    └── <project-bucket>/
+        ├── events.jsonl   # raw append-only event stream
+        ├── index.html     # self-contained dashboard
+        ├── snapshot.json  # aggregate, for static-site sync
+        └── meta.json      # project bucket metadata
 ```
 
-Add this to your project `.gitignore`:
-```
-.claude/telemetry/events.jsonl
-.claude/telemetry/index.html
-.claude/telemetry/snapshot.json
-```
+`<project-bucket>` follows Claude's own `~/.claude/projects/` naming style. For example, `/Users/didi/mycode/github/claude-telemetry-plugin` becomes `-Users-didi-mycode-github-claude-telemetry-plugin`. In the rare case two different paths map to the same bucket name, claude-telemetry appends a short suffix to keep them separate.
 
 ## Schema
 
@@ -110,7 +108,7 @@ A *turn* is bracketed by `user_prompt` → `session_stop`. Repeated reads of the
 
 ## Privacy caveats
 
-Hook payloads include raw `prompt` text, absolute file paths, and permission-request shell commands. Events stay local by default (written to your project's `.claude/telemetry/events.jsonl`), but be careful before sharing or uploading. No redaction is built in yet.
+Hook payloads include raw `prompt` text, absolute file paths, and permission-request shell commands. Events stay local by default (written under your user-scoped `~/.claude/claude-telemetry/` directory), but be careful before sharing or uploading. No redaction is built in yet.
 
 ## Layout
 
@@ -123,7 +121,7 @@ claude-telemetry-plugin/
 ├── commands/
 │   └── open.md              # /claude-telemetry:open
 ├── scripts/
-│   ├── paths.mjs            # resolves $CLAUDE_PROJECT_DIR/.claude/telemetry/*
+│   ├── paths.mjs            # resolves ~/.claude/claude-telemetry/projects/<bucket>/*
 │   ├── config.mjs           # default knowledge preset + user override loader
 │   ├── append-event.mjs     # generic hook collector
 │   ├── on-stop.mjs          # Stop / StopFailure collector (parses transcript)
