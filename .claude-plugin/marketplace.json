@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Local-first Claude Code plugins from Soon Wang",
-    "version": "1.2.1"
+    "version": "1.2.2"
   },
   "plugins": [
     {
       "name": "claude-telemetry",
       "source": "./",
       "description": "Per-turn knowledge-base hit-rate telemetry and an offline dashboard for Claude Code.",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": {
         "name": "Soon Wang",
         "email": "wangshunnn@gmail.com"
