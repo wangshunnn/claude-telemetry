@@ -329,4 +329,121 @@ describe('build.mjs', () => {
     expect(skillHit.label).toBe('vercel-react-best-practices');
     expect(snapshot.metrics.kpi.knowledgeTaskCount).toBe(1);
   });
+
+  it('redacts sensitive snapshot and dashboard fields when privacy mode is redacted', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+    const secretDoc = resolve(projectRoot, 'docs', 'secret-plan.md');
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: 'session-secret',
+        event: 'session_start',
+        cwd: projectRoot,
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-secret',
+        event: 'user_prompt',
+        prompt: 'Please review customer secret launch plan',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-secret',
+        event: 'tool_read',
+        file: secretDoc,
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-secret',
+        event: 'permission_request',
+        tool: 'Bash',
+        input: { command: 'deploy customer-secret' },
+      },
+      {
+        ts: '2026-01-01T00:00:04.000Z',
+        session_id: 'session-secret',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'The customer secret plan is risky',
+        reply_length: 33,
+        reply_truncated: false,
+        reply_ts: '2026-01-01T00:00:04.000Z',
+        request_id: 'req-secret',
+        model: 'claude-secret-model',
+        api_calls: 1,
+        tokens: { input: 10, output: 5, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 15,
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot, { CLAUDE_TELEMETRY_PRIVACY: 'redacted' });
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    expect(snapshot.privacyMode).toBe('redacted');
+    expect(snapshot.projectRoot).toBe('[redacted workspace]');
+    expect(snapshot.sourceFile).toBe('[redacted events.jsonl]');
+    expect(snapshot.metrics.recentTasks[0].prompt).toBe('[redacted prompt]');
+    expect(snapshot.metrics.recentTasks[0].reply).toBe('[redacted reply]');
+    expect(snapshot.metrics.recentTasks[0].events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ detail: '[redacted detail]' })])
+    );
+    expect(snapshot.metrics.knowledgeTargets[0].label).toBe('Docs #1');
+    expect(snapshot.metrics.recentTasks[0].knowledgeTargets[0].label).toBe('Docs #1');
+
+    const snapshotJson = JSON.stringify(snapshot);
+    expect(snapshotJson).not.toContain('customer secret');
+    expect(snapshotJson).not.toContain('secret-plan.md');
+    expect(snapshotJson).not.toContain(projectRoot);
+    expect(snapshotJson).not.toContain('claude-secret-model');
+
+    const html = readFileSync(paths.html, 'utf8');
+    expect(html).toContain('CLAUDE_TELEMETRY_PRIVACY=redacted');
+    expect(html).toContain('[redacted index.html]');
+    expect(html).not.toContain('secret-plan.md');
+    expect(html).not.toContain(projectRoot);
+  });
+
+  it('renders the refactored dashboard controls and keeps README metric wording aligned', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'No docs this turn',
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot);
+    expect(result.status).toBe(0);
+
+    const html = readFileSync(paths.html, 'utf8');
+    expect(html).toContain('class="kpi-grid"');
+    expect(html).toContain('class="diagnostic-grid"');
+    expect(html).toContain("['miss', '未命中']");
+    expect(html).toContain('没有匹配当前筛选条件的轮次');
+    expect(html).toContain('最近 50 轮 · 每轮最近 12 事件');
+
+    expect(readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf8')).toContain('token usage, and context size');
+    expect(readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf8')).not.toContain('API cost');
+    expect(readFileSync(resolve(REPO_ROOT, 'README.zh-CN.md'), 'utf8')).toContain('token 用量和上下文规模');
+    expect(readFileSync(resolve(REPO_ROOT, 'README.zh-CN.md'), 'utf8')).not.toContain('API cost');
+  });
 });

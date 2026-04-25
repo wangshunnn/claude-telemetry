@@ -71,7 +71,7 @@
 ## 你会看到什么
 
 - 每轮对 docs、rules、skills、instruction 文件的命中情况
-- 工具使用、权限申请、idle prompt、tokens 和 API cost
+- 工具使用、权限申请、idle prompt、token 用量和上下文规模
 - 数据默认保存在当前项目的 `.claude/telemetry/`
 - 生成自包含的 `index.html` 和 `snapshot.json`
 

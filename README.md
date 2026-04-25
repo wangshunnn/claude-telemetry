@@ -71,7 +71,7 @@ For local integration and implementation details, see [DEVELOPMENT.md](./DEVELOP
 ## What You Get
 
 - Per-turn knowledge hit rate for docs, rules, skills, and instruction files
-- Tool usage, permission requests, idle prompts, tokens, and API cost
+- Tool usage, permission requests, idle prompts, token usage, and context size
 - Project-local storage under `.claude/telemetry/` by default
 - Self-contained `index.html` and `snapshot.json`
 
