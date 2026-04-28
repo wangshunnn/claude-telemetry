@@ -76,6 +76,14 @@ describe('build.mjs', () => {
         command: 'pnpm test',
         description: 'Run tests',
       },
+      ...Array.from({ length: 13 }, (_, index) => ({
+        ts: `2026-01-01T00:00:02.${String(600 + index).padStart(3, '0')}Z`,
+        session_id: 'session-1',
+        event: 'tool_bash',
+        tool: 'Bash',
+        command: `echo ${index}`,
+        description: `Extra event ${index}`,
+      })),
       {
         ts: '2026-01-01T00:00:03.000Z',
         session_id: 'session-1',
@@ -107,10 +115,12 @@ describe('build.mjs', () => {
     const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
     expect(snapshot.metrics.recentTasks[0].events).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ label: 'read', detail: 'docs/guide.md' }),
         expect.objectContaining({ label: 'search:grep' }),
         expect.objectContaining({ label: 'bash', detail: 'Run tests' }),
       ])
     );
+    expect(snapshot.metrics.recentTasks[0].events).toHaveLength(18);
   });
 
   it('backfills missing token metadata from the local Claude transcript', () => {
@@ -439,7 +449,7 @@ describe('build.mjs', () => {
     expect(html).toContain('class="diagnostic-grid"');
     expect(html).toContain("['miss', '未命中']");
     expect(html).toContain('没有匹配当前筛选条件的轮次');
-    expect(html).toContain('最近 50 轮 · 每轮最近 12 事件');
+    expect(html).toContain('最近 50 轮 · 每轮全部事件');
 
     expect(readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf8')).toContain('token usage, and context size');
     expect(readFileSync(resolve(REPO_ROOT, 'README.md'), 'utf8')).not.toContain('API cost');

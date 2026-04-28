@@ -708,7 +708,7 @@ function computeMetrics(events) {
           }))
           .sort((a, b) => a.label.localeCompare(b.label))
           .slice(0, 8),
-        events: task.events.slice(-12),
+        events: task.events,
         durationMs: task.durationMs,
         durationLabel: formatDuration(task.durationMs),
         reply: task.reply || '',

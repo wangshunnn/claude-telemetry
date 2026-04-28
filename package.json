@@ -1,6 +1,6 @@
 {
   "name": "claude-telemetry",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Telemetry plugin and offline dashboard for Claude Code knowledge usage.",
   "private": true,
   "author": "Soon Wang <wangshunnn@gmail.com>",

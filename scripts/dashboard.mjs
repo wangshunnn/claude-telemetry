@@ -1165,7 +1165,7 @@ const runtime = {
   online: false,
   remoteUrl: '',
   pollHandle: null,
-  note: '当前显示构建时内嵌快照。首页主指标按全历史轮次统计；明细区覆盖最近 50 个轮次，每轮最多展示最近 12 条事件。',
+  note: '当前显示构建时内嵌快照。首页主指标按全历史轮次统计；明细区覆盖最近 50 个轮次，每轮展示全部事件明细。',
   inputValue: '',
   lastSyncAt: '',
   viewFilter: 'all',
@@ -1567,7 +1567,7 @@ function renderRecentSessions(tasks) {
   const filteredTasks = tasks.filter(function (task) {
     return dashboardTaskMatchesFilter(task, runtime.viewFilter, runtime.searchQuery);
   });
-  const countNote = '<div class="task-count-note">显示 ' + esc(filteredTasks.length) + ' / ' + esc(tasks.length) + ' 个最近轮次；快照最多保留最近 50 轮，每轮事件明细最多保留最近 12 条。</div>';
+  const countNote = '<div class="task-count-note">显示 ' + esc(filteredTasks.length) + ' / ' + esc(tasks.length) + ' 个最近轮次；快照最多保留最近 50 轮，每轮展示全部事件明细。</div>';
   if (!filteredTasks.length) {
     return toolbar + countNote + emptyState('没有匹配当前筛选条件的轮次。');
   }
@@ -1806,7 +1806,7 @@ function renderDashboard(snapshot) {
       ].join(''), '轮次级统计'),
     '</div>',
     '<div class="panel-grid">',
-      panel('最近活跃会话', '可按命中、未命中、审批、失败/未结束筛选，也可搜索 session、知识目标、prompt 或事件明细。', renderRecentSessions(metrics.recentTasks), '最近 50 轮 · 每轮最近 12 事件'),
+      panel('最近活跃会话', '可按命中、未命中、审批、失败/未结束筛选，也可搜索 session、知识目标、prompt 或事件明细。', renderRecentSessions(metrics.recentTasks), '最近 50 轮 · 每轮全部事件'),
     '</div>',
     '<div class="footnote">如果你把这份页面部署到静态站点，且与 <code>' + esc(DEFAULT_REMOTE_FILE) + '</code> 同目录，页面会自动切到在线同步模式并轮询刷新；如果没有在线源，仍然保留这次构建时的离线快照。</div>',
   ].join('');
