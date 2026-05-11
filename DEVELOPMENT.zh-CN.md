@@ -44,13 +44,14 @@ CLAUDE_PROJECT_DIR=/absolute/path/to/sample-project node scripts/build.mjs
 
 ## 发布
 
-marketplace 版本号维护在 `.claude-plugin/marketplace.json`。
+npm 包版本号维护在 `package.json`。Claude Code marketplace 版本号维护在 `.claude-plugin/marketplace.json`。
 
 每次发布时：
 
-1. 更新 `.claude-plugin/marketplace.json`。
+1. 更新 `package.json` 和 `.claude-plugin/marketplace.json`。
 2. 更新 [CHANGELOG.md](./CHANGELOG.md)。
-3. 运行 `claude plugin validate .` 和 `pnpm test` 做校验。
-4. 将发布提交推送到 GitHub。
+3. 运行 `claude plugin validate .`、`pnpm test` 和 `npm pack --dry-run` 做校验。
+4. 用 `npm publish` 发布 npm 包。
+5. 将发布提交推送到 GitHub。
 
 用户更新方式见 [README.zh-CN.md](./README.zh-CN.md)。

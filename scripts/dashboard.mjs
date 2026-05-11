@@ -9,6 +9,39 @@ function htmlEsc(value) {
   return String(value ?? '').replace(/[&<>\"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+function dashboardAgentMeta(agent) {
+  if (agent === 'codex') {
+    return {
+      key: 'codex',
+      name: 'Codex',
+      short: 'CX',
+      storage: '.codex/telemetry',
+      detail: '来自 Codex hook 采集的本地日志',
+    };
+  }
+
+  return {
+    key: 'claude',
+    name: 'Claude Code',
+    short: 'CC',
+    storage: '.claude/telemetry',
+    detail: '来自 Claude Code hook 采集的本地日志',
+  };
+}
+
+function renderPlatformCallout(platform) {
+  return [
+    '<section class="platform-callout is-' + htmlEsc(platform.key) + '" aria-label="当前 Agent 平台">',
+      '<span class="platform-mark" aria-hidden="true">' + htmlEsc(platform.short) + '</span>',
+      '<span class="platform-copy">',
+        '<span class="platform-eyebrow">当前日志平台</span>',
+        '<span class="platform-name">' + htmlEsc(platform.name) + '</span>',
+        '<span class="platform-detail">' + htmlEsc(platform.detail) + ' · <code>' + htmlEsc(platform.storage) + '</code></span>',
+      '</span>',
+    '</section>',
+  ].join('');
+}
+
 export function dashboardTaskMatchesFilter(task, filter = 'all', query = '') {
   const mode = filter || 'all';
   const knowledgeCount = Number(task?.knowledgeCount || 0);
@@ -43,12 +76,13 @@ export function renderHtml(snapshot, options = {}) {
   const sourceFile = htmlEsc(options.sourceFile || snapshot.sourceFile || '');
   const outputFile = htmlEsc(options.outputFile || '');
   const snapshotFile = htmlEsc(options.snapshotFile || SNAPSHOT_FILE_NAME);
+  const initialPlatform = dashboardAgentMeta(snapshot?.agent);
   return `<!doctype html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Code Telemetry</title>
+<title>${htmlEsc(initialPlatform.name)} Telemetry</title>
 <style>
   :root {
     --bg: #f4efe5;
@@ -148,6 +182,70 @@ export function renderHtml(snapshot, options = {}) {
     gap: 14px;
   }
 
+  .platform-callout {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 15px 16px;
+    border-radius: var(--radius-lg);
+    color: #fff;
+    background:
+      linear-gradient(135deg, rgba(31, 41, 55, 0.96), rgba(20, 83, 45, 0.9)),
+      var(--ink);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .platform-callout.is-codex {
+    background:
+      linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(29, 78, 216, 0.88)),
+      var(--ink);
+  }
+
+  .platform-mark {
+    width: 48px;
+    aspect-ratio: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.12);
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+
+  .platform-copy {
+    min-width: 0;
+  }
+
+  .platform-eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.72;
+  }
+
+  .platform-name {
+    display: block;
+    font-size: clamp(24px, 3vw, 32px);
+    line-height: 1.05;
+    font-weight: 900;
+  }
+
+  .platform-detail {
+    display: block;
+    margin-top: 7px;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
   .source-title {
     display: flex;
     justify-content: space-between;
@@ -205,6 +303,7 @@ export function renderHtml(snapshot, options = {}) {
   .badge.is-offline { background: var(--accent-soft); color: var(--accent); }
   .badge.is-warn { background: var(--gold-soft); color: var(--gold); }
   .badge.is-danger { background: var(--danger-soft); color: var(--danger); }
+  .badge.is-agent { background: rgba(17, 24, 39, 0.1); color: var(--ink); }
 
   .source-note {
     min-height: 42px;
@@ -1142,11 +1241,11 @@ export function renderHtml(snapshot, options = {}) {
   <div class="shell">
     <section class="hero">
       <article class="hero-copy">
-        <div class="eyebrow">Claude Code Hooks Telemetry</div>
-        <h1>Claude Code 遥测看板</h1>
-        <p>一屏审计知识调用是否健康，向下追到需要复盘的轮次。页面默认离线可看；如果要托管到 HTTP(S) 静态站点共享，请优先用 <code>CLAUDE_TELEMETRY_PRIVACY=redacted</code> 生成脱敏快照。</p>
+        <div class="eyebrow" id="platform-eyebrow">${htmlEsc(initialPlatform.name)} Hooks Telemetry</div>
+        <h1 id="platform-title">${htmlEsc(initialPlatform.name)} 遥测看板</h1>
+        <p>一屏审计当前 Agent 的知识调用是否健康，向下追到需要复盘的轮次。页面默认离线可看；如果要托管到 HTTP(S) 静态站点共享，请优先用 <code>CLAUDE_TELEMETRY_PRIVACY=redacted</code> 生成脱敏快照。</p>
       </article>
-      <aside class="source-card" id="source-card"></aside>
+      <aside class="source-card" id="source-card">${renderPlatformCallout(initialPlatform)}</aside>
     </section>
 
     <main id="app"></main>
@@ -1230,11 +1329,44 @@ function formatTokensN(n) {
   return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
 }
 
+function agentMeta(snapshot) {
+  const agent = snapshot && snapshot.agent === 'codex' ? 'codex' : 'claude';
+  if (agent === 'codex') {
+    return {
+      key: 'codex',
+      name: 'Codex',
+      short: 'CX',
+      storage: '.codex/telemetry',
+      detail: '来自 Codex hook 采集的本地日志',
+    };
+  }
+
+  return {
+    key: 'claude',
+    name: 'Claude Code',
+    short: 'CC',
+    storage: '.claude/telemetry',
+    detail: '来自 Claude Code hook 采集的本地日志',
+  };
+}
+
 function renderSourceCard() {
   const snapshot = runtime.snapshot || EMBEDDED_SNAPSHOT;
   const kpi = snapshot.metrics?.kpi || {};
   const privacyMode = snapshot.privacyMode || 'full';
+  const platform = agentMeta(snapshot);
+  const platformHtml = [
+    '<section class="platform-callout is-' + esc(platform.key) + '" aria-label="当前 Agent 平台">',
+      '<span class="platform-mark" aria-hidden="true">' + esc(platform.short) + '</span>',
+      '<span class="platform-copy">',
+        '<span class="platform-eyebrow">当前日志平台</span>',
+        '<span class="platform-name">' + esc(platform.name) + '</span>',
+        '<span class="platform-detail">' + esc(platform.detail) + ' · <code>' + esc(platform.storage) + '</code></span>',
+      '</span>',
+    '</section>',
+  ].join('');
   const badges = [
+    '<span class="badge is-agent">Agent ' + esc(platform.name) + '</span>',
     '<span class="badge ' + (runtime.online ? 'is-online' : 'is-offline') + '">' + (runtime.online ? '在线同步' : '离线快照') + '</span>',
     '<span class="badge ' + (privacyMode === 'redacted' ? 'is-online' : 'is-danger') + '">隐私 ' + esc(privacyMode === 'redacted' ? '已脱敏' : '完整') + '</span>',
     '<span class="badge">轮次 ' + esc(kpi.totalTaskCount ?? 0) + '</span>',
@@ -1257,6 +1389,7 @@ function renderSourceCard() {
     : '<p class="privacy-note">完整快照可能包含 prompt、AI 回复、绝对路径和审批命令。共享或托管前建议用 <code>CLAUDE_TELEMETRY_PRIVACY=redacted</code> 重新生成。</p>';
 
   return [
+    platformHtml,
     '<div class="source-title">',
       '<div>',
         '<h2>数据源</h2>',
@@ -1817,7 +1950,13 @@ function renderAll(options) {
   const sourceCard = document.getElementById('source-card');
   const app = document.getElementById('app');
   if (!sourceCard || !app) return;
+  const platform = agentMeta(runtime.snapshot);
+  const platformTitle = document.getElementById('platform-title');
+  const platformEyebrow = document.getElementById('platform-eyebrow');
 
+  if (platformTitle) platformTitle.textContent = platform.name + ' 遥测看板';
+  if (platformEyebrow) platformEyebrow.textContent = platform.name + ' Hooks Telemetry';
+  document.title = platform.name + ' Telemetry';
   sourceCard.innerHTML = renderSourceCard();
   app.innerHTML = renderDashboard(runtime.snapshot);
 

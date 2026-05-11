@@ -2,16 +2,38 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
-export function resolveProjectRoot() {
-  return resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+export const SUPPORTED_AGENTS = ['claude', 'codex'];
+
+export function normalizeAgent(agent = process.env.CLAUDE_TELEMETRY_AGENT || 'claude') {
+  return agent === 'codex' ? 'codex' : 'claude';
 }
 
-export function resolveTelemetryRoot(projectRoot = resolveProjectRoot()) {
+export function agentTelemetryDirName(agent = 'claude') {
+  return normalizeAgent(agent) === 'codex' ? '.codex' : '.claude';
+}
+
+export function resolveProjectRoot(agent = process.env.CLAUDE_TELEMETRY_AGENT || 'claude') {
+  const normalizedAgent = normalizeAgent(agent);
+  const agentProjectDir = normalizedAgent === 'codex'
+    ? process.env.CODEX_PROJECT_DIR
+    : process.env.CLAUDE_PROJECT_DIR;
+  return resolve(
+    agentProjectDir ||
+    process.env.CLAUDE_PROJECT_DIR ||
+    process.env.CODEX_PROJECT_DIR ||
+    process.cwd()
+  );
+}
+
+export function resolveTelemetryRoot(projectRoot = resolveProjectRoot(), agent = 'claude') {
   const normalizedRoot = resolve(projectRoot);
-  const override = process.env.CLAUDE_TELEMETRY_ROOT;
+  const normalizedAgent = normalizeAgent(agent);
+  const override = normalizedAgent === 'codex'
+    ? (process.env.CODEX_TELEMETRY_ROOT || process.env.CLAUDE_TELEMETRY_ROOT)
+    : process.env.CLAUDE_TELEMETRY_ROOT;
   return override
     ? resolve(normalizedRoot, override)
-    : resolve(normalizedRoot, '.claude', 'telemetry');
+    : resolve(normalizedRoot, agentTelemetryDirName(normalizedAgent), 'telemetry');
 }
 
 export function projectBucketStem(projectRoot) {
@@ -75,11 +97,13 @@ export function projectBucketName(projectRoot = resolveProjectRoot(), telemetryR
 
 export function resolveTelemetryPaths(
   projectRoot = resolveProjectRoot(),
-  telemetryRoot = resolveTelemetryRoot(projectRoot)
+  telemetryRoot = null,
+  options = {}
 ) {
+  const agent = normalizeAgent(options.agent);
   const normalizedRoot = resolve(projectRoot);
-  const normalizedTelemetryRoot = resolve(telemetryRoot);
-  const localTelemetryRoot = resolve(normalizedRoot, '.claude', 'telemetry');
+  const normalizedTelemetryRoot = resolve(telemetryRoot || resolveTelemetryRoot(normalizedRoot, agent));
+  const localTelemetryRoot = resolve(normalizedRoot, agentTelemetryDirName(agent), 'telemetry');
   const useSharedBuckets = normalizedTelemetryRoot !== localTelemetryRoot;
   const projectsDir = useSharedBuckets
     ? resolve(normalizedTelemetryRoot, 'projects')
@@ -91,6 +115,7 @@ export function resolveTelemetryPaths(
     ? resolve(projectsDir, bucketName)
     : normalizedTelemetryRoot;
   return {
+    agent,
     projectRoot: normalizedRoot,
     telemetryRoot: normalizedTelemetryRoot,
     storageMode: useSharedBuckets ? 'shared' : 'project',
@@ -121,6 +146,7 @@ export function writeProjectMeta(paths = resolveTelemetryPaths()) {
   const current = readProjectMeta(paths.meta);
   const projectName = basename(paths.projectRoot) || paths.projectRoot;
   const next = {
+    agent: paths.agent || 'claude',
     projectRoot: paths.projectRoot,
     projectName,
     storageMode: paths.storageMode,

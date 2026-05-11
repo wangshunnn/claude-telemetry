@@ -135,7 +135,7 @@ export function transcriptPathForSession(sessionId, cwd) {
   return resolve(homedir(), '.claude', 'projects', projectBucketStem(projectRoot), `${sessionId}.jsonl`);
 }
 
-export function transcriptCandidates(input) {
+export function transcriptCandidates(input, options = {}) {
   const candidates = [];
   const seen = new Set();
   const add = (path, source) => {
@@ -149,7 +149,7 @@ export function transcriptCandidates(input) {
   add(input.transcript_path, 'hook_input');
 
   const sessionId = typeof input.session_id === 'string' ? input.session_id.trim() : '';
-  if (sessionId) {
+  if (sessionId && options.agent !== 'codex') {
     const projectRoot = resolve(input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd());
     add(transcriptPathForSession(sessionId, projectRoot), 'inferred');
   }

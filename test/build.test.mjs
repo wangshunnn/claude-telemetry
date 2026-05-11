@@ -8,13 +8,14 @@ import { ensureTelemetryDir, projectBucketStem, resolveTelemetryPaths } from '..
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TEST_DIR, '..');
 
-function runBuild(projectRoot, extraEnv = {}) {
-  return spawnSync(process.execPath, ['scripts/build.mjs'], {
+function runBuild(projectRoot, extraEnv = {}, agent = 'claude') {
+  return spawnSync(process.execPath, ['scripts/build.mjs', '--agent', agent], {
     cwd: REPO_ROOT,
     env: {
       ...process.env,
       ...extraEnv,
       CLAUDE_PROJECT_DIR: projectRoot,
+      CODEX_PROJECT_DIR: projectRoot,
     },
     encoding: 'utf8',
   });
@@ -113,6 +114,7 @@ describe('build.mjs', () => {
     expect(existsSync(resolve(projectRoot, '.claude', 'telemetry'))).toBe(true);
     expect(result.stdout.trim()).toBe(pathToFileURL(paths.html).toString());
     const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    expect(snapshot.agent).toBe('claude');
     expect(snapshot.metrics.recentTasks[0].events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: 'read', detail: 'docs/guide.md' }),
@@ -121,6 +123,71 @@ describe('build.mjs', () => {
       ])
     );
     expect(snapshot.metrics.recentTasks[0].events).toHaveLength(18);
+  });
+
+  it('builds Codex dashboard artifacts from .codex/telemetry with the same snapshot shape', () => {
+    const paths = resolveTelemetryPaths(projectRoot, null, { agent: 'codex' });
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: 'session-1',
+        agent: 'codex',
+        event: 'session_start',
+        cwd: projectRoot,
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        agent: 'codex',
+        event: 'user_prompt',
+        prompt: 'Read the docs',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-1',
+        agent: 'codex',
+        event: 'tool_read',
+        file: resolve(projectRoot, 'docs', 'guide.md'),
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-1',
+        agent: 'codex',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'done',
+        reply_length: 4,
+        reply_truncated: false,
+        tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot, {}, 'codex');
+
+    expect(result.status).toBe(0);
+    expect(existsSync(paths.html)).toBe(true);
+    expect(existsSync(paths.snapshot)).toBe(true);
+    expect(result.stdout.trim()).toBe(pathToFileURL(paths.html).toString());
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    expect(snapshot.agent).toBe('codex');
+    expect(snapshot.metrics.kpi.totalTaskCount).toBe(1);
+    expect(snapshot.metrics.kpi.knowledgeTaskCount).toBe(1);
+    expect(snapshot.metrics.recentTasks[0].events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: 'read', detail: 'docs/guide.md' })])
+    );
+
+    const html = readFileSync(paths.html, 'utf8');
+    expect(html).toContain('"agent":"codex"');
+    expect(html).toContain('class="platform-callout is-codex"');
+    expect(html).toContain('当前日志平台');
+    expect(html).toContain('Codex 遥测看板');
+    expect(html).toContain('.codex/telemetry');
   });
 
   it('backfills missing token metadata from the local Claude transcript', () => {
@@ -447,6 +514,10 @@ describe('build.mjs', () => {
     const html = readFileSync(paths.html, 'utf8');
     expect(html).toContain('class="kpi-grid"');
     expect(html).toContain('class="diagnostic-grid"');
+    expect(html).toContain('id="platform-title"');
+    expect(html).toContain('class="platform-callout is-claude"');
+    expect(html).toContain('Claude Code 遥测看板');
+    expect(html).toContain('.claude/telemetry');
     expect(html).toContain("['miss', '未命中']");
     expect(html).toContain('没有匹配当前筛选条件的轮次');
     expect(html).toContain('最近 50 轮 · 每轮全部事件');

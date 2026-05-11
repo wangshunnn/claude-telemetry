@@ -1,6 +1,6 @@
 {
   "name": "claude-telemetry",
-  "description": "Per-turn knowledge-base hit-rate telemetry + offline dashboard for Claude Code. Collects hook events into a global ~/.claude/claude-telemetry project bucket and renders a self-contained HTML dashboard.",
+  "description": "Per-turn knowledge-base hit-rate telemetry + offline dashboard for Claude Code. Collects hook events into project-local .claude/telemetry and renders a self-contained HTML dashboard.",
   "author": {
     "name": "Soon Wang",
     "url": "https://github.com/wangshunnn"

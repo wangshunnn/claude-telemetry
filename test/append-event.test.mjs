@@ -8,12 +8,13 @@ import { resolveTelemetryPaths } from '../scripts/paths.mjs';
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TEST_DIR, '..');
 
-function runHook(profile, input, { projectRoot, home }) {
-  return spawnSync(process.execPath, ['scripts/append-event.mjs', profile], {
+function runHook(profile, input, { projectRoot, home, agent = 'claude' }) {
+  return spawnSync(process.execPath, ['scripts/append-event.mjs', profile, agent], {
     cwd: REPO_ROOT,
     env: {
       ...process.env,
       CLAUDE_PROJECT_DIR: projectRoot,
+      CODEX_PROJECT_DIR: projectRoot,
       HOME: home,
     },
     input: JSON.stringify(input),
@@ -177,5 +178,128 @@ describe('append-event.mjs tool events', () => {
       description: 'Run tests',
       session_id: 's1',
     });
+  });
+});
+
+describe('append-event.mjs Codex adapter', () => {
+  let sandbox;
+  let projectRoot;
+  let fakeHome;
+
+  beforeEach(() => {
+    sandbox = resolve('/tmp', `claude-tel-codex-hook-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    projectRoot = resolve(sandbox, 'workspace');
+    fakeHome = resolve(sandbox, 'home');
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(fakeHome, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  it('writes Codex prompt events into .codex/telemetry', () => {
+    const result = runHook('user_prompt', {
+      session_id: 's1',
+      turn_id: 'turn-1',
+      prompt: 'Review the repo',
+      cwd: projectRoot,
+    }, { projectRoot, home: fakeHome, agent: 'codex' });
+
+    expect(result.status).toBe(0);
+
+    const paths = resolveTelemetryPaths(projectRoot, null, { agent: 'codex' });
+    const events = readEvents(paths);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      agent: 'codex',
+      event: 'user_prompt',
+      source_hook: 'UserPromptSubmit',
+      prompt: 'Review the repo',
+      turn_id: 'turn-1',
+    });
+    expect(existsSync(resolveTelemetryPaths(projectRoot).events)).toBe(false);
+  });
+
+  it('maps Codex Bash post-tool-use and conservative file reads', () => {
+    const result = runHook('post_tool_use', {
+      session_id: 's1',
+      tool_name: 'Bash',
+      cwd: projectRoot,
+      tool_input: {
+        command: 'cat docs/guide.md',
+        description: 'Read guide',
+      },
+    }, { projectRoot, home: fakeHome, agent: 'codex' });
+
+    expect(result.status).toBe(0);
+
+    const paths = resolveTelemetryPaths(projectRoot, null, { agent: 'codex' });
+    const events = readEvents(paths);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      agent: 'codex',
+      event: 'tool_bash',
+      tool: 'Bash',
+      command: 'cat docs/guide.md',
+      description: 'Read guide',
+    });
+    expect(events[1]).toMatchObject({
+      agent: 'codex',
+      event: 'tool_read',
+      tool: 'Bash',
+      file: resolve(projectRoot, 'docs', 'guide.md'),
+    });
+  });
+
+  it('maps Codex apply_patch post-tool-use to a write event', () => {
+    const result = runHook('post_tool_use', {
+      session_id: 's1',
+      tool_name: 'apply_patch',
+      cwd: projectRoot,
+      tool_input: {
+        command: '*** Begin Patch\n*** Update File: README.md\n*** End Patch',
+      },
+    }, { projectRoot, home: fakeHome, agent: 'codex' });
+
+    expect(result.status).toBe(0);
+
+    const events = readEvents(resolveTelemetryPaths(projectRoot, null, { agent: 'codex' }));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      agent: 'codex',
+      event: 'tool_write',
+      source_hook: 'PostToolUse',
+      tool: 'apply_patch',
+    });
+  });
+
+  it('maps Codex permission requests with compact input only', () => {
+    const result = runHook('permission_request', {
+      session_id: 's1',
+      turn_id: 'turn-1',
+      tool_name: 'Bash',
+      cwd: projectRoot,
+      tool_input: {
+        command: 'pnpm install',
+        description: 'Install dependencies',
+        secret: 'not copied',
+      },
+    }, { projectRoot, home: fakeHome, agent: 'codex' });
+
+    expect(result.status).toBe(0);
+
+    const [event] = readEvents(resolveTelemetryPaths(projectRoot, null, { agent: 'codex' }));
+    expect(event).toMatchObject({
+      agent: 'codex',
+      event: 'permission_request',
+      source_hook: 'PermissionRequest',
+      tool: 'Bash',
+      input: {
+        command: 'pnpm install',
+        description: 'Install dependencies',
+      },
+    });
+    expect(JSON.stringify(event)).not.toContain('not copied');
   });
 });

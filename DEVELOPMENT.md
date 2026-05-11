@@ -44,13 +44,14 @@ To verify the end-to-end plugin flow in Claude Code, install the plugin, use Cla
 
 ## Release
 
-The marketplace version is managed in `.claude-plugin/marketplace.json`.
+The npm package version is managed in `package.json`. The Claude Code marketplace version is managed in `.claude-plugin/marketplace.json`.
 
 For each release:
 
-1. Update `.claude-plugin/marketplace.json`.
+1. Update `package.json` and `.claude-plugin/marketplace.json`.
 2. Update [CHANGELOG.md](./CHANGELOG.md).
-3. Validate with `claude plugin validate .` and `pnpm test`.
-4. Push the release commit to GitHub.
+3. Validate with `claude plugin validate .`, `pnpm test`, and `npm pack --dry-run`.
+4. Publish to npm with `npm publish`.
+5. Push the release commit to GitHub.
 
 Users then update with the commands in [README.md](./README.md).

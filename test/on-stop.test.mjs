@@ -9,21 +9,22 @@ import { projectBucketStem, resolveTelemetryPaths } from '../scripts/paths.mjs';
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TEST_DIR, '..');
 
-function runStopHook(projectRoot, input, extraEnv = {}) {
-  return spawnSync(process.execPath, ['scripts/on-stop.mjs'], {
+function runStopHook(projectRoot, input, extraEnv = {}, agent = 'claude') {
+  return spawnSync(process.execPath, ['scripts/on-stop.mjs', agent], {
     cwd: REPO_ROOT,
     env: {
       ...process.env,
       ...extraEnv,
       CLAUDE_PROJECT_DIR: projectRoot,
+      CODEX_PROJECT_DIR: projectRoot,
     },
     input: JSON.stringify(input),
     encoding: 'utf8',
   });
 }
 
-function readEvents(projectRoot) {
-  const paths = resolveTelemetryPaths(projectRoot);
+function readEvents(projectRoot, agent = 'claude') {
+  const paths = resolveTelemetryPaths(projectRoot, null, { agent });
   return readFileSync(paths.events, 'utf8')
     .trim()
     .split('\n')
@@ -40,6 +41,45 @@ describe('on-stop.mjs', () => {
     projectRoot = resolve(sandbox, 'workspace', 'sample-project');
     mkdirSync(projectRoot, { recursive: true });
     delete process.env.CLAUDE_TELEMETRY_ROOT;
+  });
+
+  it('writes Codex stop events into .codex telemetry without inferred Claude transcript lookup', () => {
+    const sessionId = 'session-1';
+    const fakeHome = resolve(sandbox, 'home');
+    const transcriptDir = resolve(fakeHome, '.claude', 'projects', projectBucketStem(projectRoot));
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(resolve(transcriptDir, `${sessionId}.jsonl`), [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-01-01T00:00:01.000Z',
+        message: {
+          role: 'assistant',
+          model: 'claude-test',
+          content: [{ type: 'text', text: 'Should not be used' }],
+          usage: { input_tokens: 20, output_tokens: 5 },
+        },
+      }),
+    ].join('\n') + '\n');
+
+    const result = runStopHook(projectRoot, {
+      session_id: sessionId,
+      hook_event_name: 'Stop',
+      cwd: projectRoot,
+      turn_id: 'turn-1',
+      last_assistant_message: 'Codex reply',
+    }, { HOME: fakeHome }, 'codex');
+
+    expect(result.status).toBe(0);
+    const [event] = readEvents(projectRoot, 'codex');
+    expect(event).toMatchObject({
+      agent: 'codex',
+      event: 'session_stop',
+      reply: 'Codex reply',
+      reply_source: 'last_assistant_message',
+      turn_id: 'turn-1',
+      model: '',
+      api_calls: 0,
+    });
   });
 
   afterEach(() => {
