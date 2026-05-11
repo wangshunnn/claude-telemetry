@@ -1,11 +1,29 @@
 {
-  "name": "claude-telemetry",
+  "name": "@wangshunnn/claude-telemetry",
   "version": "1.2.3",
-  "description": "Telemetry plugin and offline dashboard for Claude Code knowledge usage.",
-  "private": true,
+  "description": "Local-first telemetry and offline dashboards for Claude Code and Codex.",
+  "bin": {
+    "claude-telemetry": "./bin/claude-telemetry.mjs"
+  },
+  "files": [
+    ".claude-plugin/",
+    "bin/",
+    "commands/",
+    "hooks/",
+    "scripts/",
+    "screenshot/",
+    "CHANGELOG.md",
+    "DEVELOPMENT.md",
+    "DEVELOPMENT.zh-CN.md",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md"
+  ],
   "author": "Soon Wang <wangshunnn@gmail.com>",
   "keywords": [
     "claude-code",
+    "codex",
+    "codex-cli",
     "telemetry",
     "observability",
     "dashboard",
@@ -15,9 +33,20 @@
     "type": "git",
     "url": "git+https://github.com/wangshunnn/claude-telemetry.git"
   },
+  "bugs": {
+    "url": "https://github.com/wangshunnn/claude-telemetry/issues"
+  },
   "homepage": "https://github.com/wangshunnn/claude-telemetry",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:dry-run": "npm pack --dry-run",
+    "prepublishOnly": "pnpm test && npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",

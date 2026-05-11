@@ -34,6 +34,10 @@ describe('paths', () => {
     expect(resolveTelemetryRoot('/tmp/example-project')).toBe('/tmp/example-project/.claude/telemetry');
   });
 
+  it('resolves the default Codex telemetry root inside the project', () => {
+    expect(resolveTelemetryRoot('/tmp/example-project', 'codex')).toBe('/tmp/example-project/.codex/telemetry');
+  });
+
   it('resolves a custom telemetry root from CLAUDE_TELEMETRY_ROOT', () => {
     process.env.CLAUDE_TELEMETRY_ROOT = '../shared-output';
     expect(resolveTelemetryRoot('/tmp/example-project')).toBe('/tmp/shared-output');
@@ -78,6 +82,21 @@ describe('paths', () => {
     ensureTelemetryDir(paths);
 
     expect(paths.dir).toBe(resolve(projectRoot, '.claude', 'telemetry'));
+    expect(paths.events).toBe(resolve(paths.dir, 'events.jsonl'));
+    expect(paths.html).toBe(resolve(paths.dir, 'index.html'));
+    expect(paths.snapshot).toBe(resolve(paths.dir, 'snapshot.json'));
+    expect(paths.bucketName).toBeNull();
+    expect(paths.meta).toBeNull();
+  });
+
+  it('writes Codex events and dashboard outputs into the project-local Codex telemetry directory', () => {
+    const projectRoot = resolve(sandbox, 'workspace', 'demo-app');
+    const paths = resolveTelemetryPaths(projectRoot, null, { agent: 'codex' });
+
+    ensureTelemetryDir(paths);
+
+    expect(paths.agent).toBe('codex');
+    expect(paths.dir).toBe(resolve(projectRoot, '.codex', 'telemetry'));
     expect(paths.events).toBe(resolve(paths.dir, 'events.jsonl'));
     expect(paths.html).toBe(resolve(paths.dir, 'index.html'));
     expect(paths.snapshot).toBe(resolve(paths.dir, 'snapshot.json'));

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { appendFileSync, readFileSync } from 'node:fs';
-import { ensureTelemetryDir } from './paths.mjs';
+import { ensureTelemetryDir, normalizeAgent, resolveTelemetryPaths } from './paths.mjs';
 import {
   MAX_REPLY_LEN,
   coerceReply,
@@ -17,8 +17,8 @@ function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
 
-async function extractTurnData(input) {
-  const candidates = transcriptCandidates(input);
+async function extractTurnData(input, agent) {
+  const candidates = transcriptCandidates(input, { agent });
   if (!candidates.length) return emptyTurnData();
 
   let best = emptyTurnData();
@@ -39,10 +39,11 @@ async function main() {
   let input = {};
   try { input = JSON.parse(raw); } catch {}
 
+  const agent = normalizeAgent(process.argv[2]);
   const hookName = input.hook_event_name || 'Stop';
   const isFailure = hookName === 'StopFailure' || Boolean(input.error || input.error_details);
 
-  const turn = await extractTurnData(input);
+  const turn = await extractTurnData(input, agent);
 
   const fallbackReply = coerceReply(input.last_assistant_message);
   let reply = turn.reply || fallbackReply;
@@ -53,6 +54,7 @@ async function main() {
   const event = {
     ts: new Date().toISOString(),
     session_id: input.session_id || '',
+    agent,
     event: 'session_stop',
     stop_status: isFailure ? 'failure' : 'success',
     source_hook: isFailure ? 'StopFailure' : 'Stop',
@@ -68,12 +70,14 @@ async function main() {
     max_context_tokens: turn.maxContextTokens,
     transcript_source: turn.transcriptSource,
   };
+  if (input.turn_id) event.turn_id = input.turn_id;
   if (isFailure) {
     if (input.error) event.error = input.error;
     if (input.error_details) event.error_details = input.error_details;
   }
 
-  const { events } = ensureTelemetryDir();
+  const projectRoot = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.env.CODEX_PROJECT_DIR || process.cwd();
+  const { events } = ensureTelemetryDir(resolveTelemetryPaths(projectRoot, null, { agent }));
   appendFileSync(events, JSON.stringify(event) + '\n');
 }
 

@@ -12,7 +12,7 @@
 import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
-import { ensureTelemetryDir } from './paths.mjs';
+import { ensureTelemetryDir, normalizeAgent, resolveProjectRoot, resolveTelemetryPaths } from './paths.mjs';
 import { renderHtml } from './dashboard.mjs';
 import { loadKnowledgeTargets } from './config.mjs';
 import {
@@ -29,7 +29,22 @@ import {
   extractKnowledgeTarget as _extractKnowledgeTarget,
 } from './metrics.mjs';
 
-const { projectRoot: PROJECT_ROOT, events: EVENTS_PATH, html: OUTPUT_PATH, snapshot: SNAPSHOT_PATH } = ensureTelemetryDir();
+function agentFromArgs(argv = process.argv.slice(2)) {
+  const agentFlag = argv.find((arg) => arg.startsWith('--agent='));
+  if (agentFlag) return normalizeAgent(agentFlag.slice('--agent='.length));
+  const index = argv.indexOf('--agent');
+  if (index >= 0) return normalizeAgent(argv[index + 1]);
+  return 'claude';
+}
+
+const AGENT = agentFromArgs();
+const AGENT_LABEL = AGENT === 'codex' ? 'Codex' : 'Claude Code';
+const PROJECT_ROOT = resolveProjectRoot(AGENT);
+const {
+  events: EVENTS_PATH,
+  html: OUTPUT_PATH,
+  snapshot: SNAPSHOT_PATH,
+} = ensureTelemetryDir(resolveTelemetryPaths(PROJECT_ROOT, null, { agent: AGENT }));
 const RECENT_TASK_LIMIT = 50;
 
 const KNOWLEDGE_TARGET_DEFS = await loadKnowledgeTargets(PROJECT_ROOT);
@@ -90,6 +105,11 @@ const EVENT_META = {
     label: 'Write',
     shortLabel: 'write',
     color: '#dc2626',
+  },
+  tool_use: {
+    label: 'Tool',
+    shortLabel: 'tool',
+    color: '#64748b',
   },
   skill_invoked: {
     label: 'Skill',
@@ -219,6 +239,8 @@ function mergeTranscriptBackfill(event, turn) {
 }
 
 async function backfillEventsFromTranscripts(events) {
+  if (AGENT !== 'claude') return events;
+
   const cwdBySession = new Map();
   const transcriptCache = new Map();
   const out = [];
@@ -346,6 +368,10 @@ function summarizeEvent(event) {
     case 'tool_write':
       label = event.tool ? `write:${String(event.tool).toLowerCase()}` : label;
       detail = compactPath(event.file);
+      break;
+    case 'tool_use':
+      label = event.tool ? `tool:${String(event.tool).toLowerCase()}` : label;
+      detail = truncate(event.input?.description || event.input?.command || event.input?.path || event.input?.query || '', 140);
       break;
     case 'skill_invoked':
       label = event.skill ? `skill:${event.skill}` : label;
@@ -729,6 +755,7 @@ function computeMetrics(events) {
 function buildSnapshot(events, malformed) {
   const snapshot = {
     version: 2,
+    agent: AGENT,
     generatedAt: new Date().toISOString(),
     projectRoot: shortenHome(PROJECT_ROOT),
     sourceFile: compactPath(EVENTS_PATH),
@@ -817,8 +844,12 @@ function applyPrivacyMode(snapshot, privacyMode) {
 }
 
 const NO_DATA_MESSAGE = [
-  '暂无本项目的 telemetry 数据。请完成至少一次 Claude Code 对话后，再次运行 /claude-telemetry:open。',
-  'No telemetry turns yet for this project. Collect at least one Claude Code turn, then run /claude-telemetry:open again.',
+  AGENT === 'claude'
+    ? '暂无本项目的 telemetry 数据。请完成至少一次 Claude Code 对话后，再次运行 /claude-telemetry:open。'
+    : '暂无本项目的 Codex telemetry 数据。请完成至少一次 Codex 对话后，再次运行 claude-telemetry open codex。',
+  AGENT === 'claude'
+    ? 'No telemetry turns yet for this project. Collect at least one Claude Code turn, then run /claude-telemetry:open again.'
+    : 'No Codex telemetry turns yet for this project. Collect at least one Codex turn, then run claude-telemetry open codex again.',
 ].join('\n');
 
 function eventsFileIsEmpty() {
