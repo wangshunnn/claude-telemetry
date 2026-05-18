@@ -1,6 +1,6 @@
 {
   "name": "@wangshunnn/claude-telemetry",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Local-first telemetry and offline dashboards for Claude Code and Codex.",
   "bin": {
     "claude-telemetry": "./bin/claude-telemetry.mjs"
