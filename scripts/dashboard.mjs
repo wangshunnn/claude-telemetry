@@ -62,10 +62,10 @@ export function dashboardTaskMatchesFilter(task, filter = 'all', query = '') {
     task?.prompt,
     task?.status,
     ...(Array.isArray(task?.knowledgeTargets)
-      ? task.knowledgeTargets.flatMap((target) => [target.label, target.kindLabel])
+      ? task.knowledgeTargets.flatMap((target) => [target.label, target.kind, target.kindLabel])
       : []),
     ...(Array.isArray(task?.events)
-      ? task.events.flatMap((event) => [event.label, event.detail, event.key, event.knowledgeKindLabel])
+      ? task.events.flatMap((event) => [event.label, event.detail, event.key, event.knowledgeKind, event.knowledgeKindLabel])
       : []),
   ].filter(Boolean).join(' ').toLowerCase();
 
@@ -98,6 +98,8 @@ export function renderHtml(snapshot, options = {}) {
     --gold-soft: rgba(180, 83, 9, 0.1);
     --blue: #1d4ed8;
     --blue-soft: rgba(29, 78, 216, 0.1);
+    --skill: #d94841;
+    --skill-soft: rgba(217, 72, 65, 0.1);
     --danger: #c2410c;
     --danger-soft: rgba(194, 65, 12, 0.1);
     --shadow: 0 18px 60px rgba(38, 49, 61, 0.08);
@@ -611,8 +613,8 @@ export function renderHtml(snapshot, options = {}) {
   }
 
   .hbar-kind-badge.is-skill {
-    color: #d94841;
-    background: rgba(217, 72, 65, 0.1);
+    color: var(--skill);
+    background: var(--skill-soft);
     border-color: rgba(217, 72, 65, 0.16);
   }
 
@@ -1031,6 +1033,11 @@ export function renderHtml(snapshot, options = {}) {
     font-weight: 700;
   }
 
+  .doc-chip.is-skill {
+    background: var(--skill-soft);
+    color: var(--skill);
+  }
+
   .reply-block {
     margin-top: 14px;
     padding: 14px;
@@ -1145,6 +1152,14 @@ export function renderHtml(snapshot, options = {}) {
     box-shadow: inset 3px 0 0 rgba(29, 78, 216, 0.72);
   }
 
+  .session-row.is-knowledge-hit.is-skill-hit td {
+    background: rgba(217, 72, 65, 0.07);
+  }
+
+  .session-row.is-knowledge-hit.is-skill-hit td:first-child {
+    box-shadow: inset 3px 0 0 rgba(217, 72, 65, 0.76);
+  }
+
   .session-detail.is-knowledge-hit {
     color: var(--ink);
     font-weight: 700;
@@ -1160,6 +1175,11 @@ export function renderHtml(snapshot, options = {}) {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.02em;
+  }
+
+  .session-hit-badge.is-skill {
+    background: var(--skill-soft);
+    color: var(--skill);
   }
 
   .empty-state {
@@ -1289,6 +1309,36 @@ function esc(value) {
   return String(value ?? '').replace(/[&<>\"']/g, function (ch) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
   });
+}
+
+function knowledgeKindClass(kind, kindLabel) {
+  const raw = String(kind || kindLabel || '').trim().toLowerCase();
+  const classes = {
+    doc: 'is-doc',
+    docs: 'is-doc',
+    skill: 'is-skill',
+  };
+  return classes[raw] || '';
+}
+
+function targetChip(item) {
+  const kindClass = knowledgeKindClass(item && item.kind, item && item.kindLabel);
+  return '<span class="doc-chip' + (kindClass ? ' ' + kindClass : '') + '">' + esc(item.kindLabel + ' · ' + item.label) + '</span>';
+}
+
+function eventKnowledgeHitClass(event) {
+  if (!event || !event.knowledgeHit) return '';
+  const kindClass = knowledgeKindClass(event.knowledgeKind, event.knowledgeKindLabel);
+  return ['is-knowledge-hit', kindClass ? kindClass + '-hit' : ''].filter(Boolean).join(' ');
+}
+
+function eventKnowledgeHitBadge(event) {
+  if (!event || !event.knowledgeHit) return '';
+  const kindClass = knowledgeKindClass(event.knowledgeKind, event.knowledgeKindLabel);
+  const label = kindClass === 'is-skill'
+    ? (event.knowledgeKindLabel || 'Skill') + ' 命中'
+    : '知识命中';
+  return '<span class="session-hit-badge' + (kindClass ? ' ' + kindClass : '') + '">' + esc(label) + '</span>';
 }
 
 function formatFull(ts) {
@@ -1650,12 +1700,13 @@ function buildRecentSessionGroups(tasks) {
 function renderTaskRows(events) {
   return (events || []).map(function (event) {
     const tag = '<span class="session-event-tag"><i style="background:' + esc(event.color) + '"></i>' + esc(event.label) + '</span>';
-    const hitBadge = event.knowledgeHit ? '<span class="session-hit-badge">知识命中</span>' : '';
+    const hitClass = eventKnowledgeHitClass(event);
+    const hitBadge = eventKnowledgeHitBadge(event);
     return [
-      '<tr class="session-row' + (event.knowledgeHit ? ' is-knowledge-hit' : '') + '">',
+      '<tr class="session-row' + (hitClass ? ' ' + hitClass : '') + '">',
         '<td class="session-time">' + esc(event.ts) + '</td>',
         '<td>' + tag + '</td>',
-        '<td class="session-detail' + (event.knowledgeHit ? ' is-knowledge-hit' : '') + '">' + hitBadge + (hitBadge ? ' ' : '') + esc(event.detail || '—') + '</td>',
+        '<td class="session-detail' + (hitClass ? ' ' + hitClass : '') + '">' + hitBadge + (hitBadge ? ' ' : '') + esc(event.detail || '—') + '</td>',
       '</tr>',
     ].join('');
   }).join('');
@@ -1727,7 +1778,7 @@ function renderRecentSessions(tasks) {
 
     const sessionChips = session.knowledgeTargets && session.knowledgeTargets.length
       ? '<div class="doc-chips">' + session.knowledgeTargets.map(function (item) {
-          return '<span class="doc-chip">' + esc(item.kindLabel + ' · ' + item.label) + '</span>';
+          return targetChip(item);
         }).join('') + '</div>'
       : '';
 
@@ -1754,7 +1805,7 @@ function renderRecentSessions(tasks) {
 
       const knowledgeChips = task.knowledgeTargets && task.knowledgeTargets.length
         ? '<div class="doc-chips">' + task.knowledgeTargets.map(function (item) {
-            return '<span class="doc-chip">' + esc(item.kindLabel + ' · ' + item.label) + '</span>';
+            return targetChip(item);
           }).join('') + '</div>'
         : '';
 

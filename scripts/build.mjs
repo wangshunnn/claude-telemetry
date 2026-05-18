@@ -25,7 +25,6 @@ import {
 import {
   shortenHome,
   compactPath as _compactPath,
-  classifyKnowledgePath as _classifyKnowledgePath,
   extractKnowledgeTarget as _extractKnowledgeTarget,
 } from './metrics.mjs';
 
@@ -276,7 +275,6 @@ function formatDuration(ms) {
 
 const compactPath = (p) => _compactPath(p, PROJECT_ROOT);
 
-const classifyKnowledgePath = (p) => _classifyKnowledgePath(p, KNOWLEDGE_TARGET_DEFS, PROJECT_ROOT);
 const extractKnowledgeTarget = (e) => _extractKnowledgeTarget(e, KNOWLEDGE_TARGET_DEFS, PROJECT_ROOT);
 
 function incrementMap(map, key, amount = 1) {
@@ -332,7 +330,7 @@ function eventMeta(eventOrKey) {
 function summarizeEvent(event) {
   const key = eventKeyForDisplay(event);
   const meta = eventMeta(key);
-  const knowledgeReadTarget = event.event === 'tool_read' ? classifyKnowledgePath(event.file) : null;
+  const knowledgeTarget = extractKnowledgeTarget(event);
   let label = meta.shortLabel;
   let detail = '';
 
@@ -412,8 +410,9 @@ function summarizeEvent(event) {
     color: meta.color,
     label,
     detail,
-    knowledgeHit: Boolean(knowledgeReadTarget),
-    knowledgeKindLabel: knowledgeReadTarget?.kindLabel ?? '',
+    knowledgeHit: Boolean(knowledgeTarget),
+    knowledgeKind: knowledgeTarget?.kind ?? '',
+    knowledgeKindLabel: knowledgeTarget?.kindLabel ?? '',
   };
 }
 
@@ -730,6 +729,7 @@ function computeMetrics(events) {
         knowledgeTargets: [...task.knowledgeTargets.values()]
           .map((target) => ({
             label: target.label,
+            kind: target.kind,
             kindLabel: target.kindLabel,
           }))
           .sort((a, b) => a.label.localeCompare(b.label))

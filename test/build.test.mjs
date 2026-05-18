@@ -405,6 +405,31 @@ describe('build.mjs', () => {
     expect(skillHit.kind).toBe('skill');
     expect(skillHit.label).toBe('vercel-react-best-practices');
     expect(snapshot.metrics.kpi.knowledgeTaskCount).toBe(1);
+
+    const recentTask = snapshot.metrics.recentTasks[0];
+    expect(recentTask.knowledgeTargets[0]).toMatchObject({
+      kind: 'skill',
+      kindLabel: 'Skill',
+      label: 'vercel-react-best-practices',
+    });
+    expect(recentTask.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'skill_invoked',
+        knowledgeHit: true,
+        knowledgeKind: 'skill',
+        knowledgeKindLabel: 'Skill',
+      }),
+      expect.objectContaining({
+        key: 'tool_read',
+        knowledgeHit: true,
+        knowledgeKind: 'skill',
+        knowledgeKindLabel: 'Skill',
+      }),
+    ]));
+
+    const html = readFileSync(paths.html, 'utf8');
+    expect(html).toContain('.session-row.is-knowledge-hit.is-skill-hit td');
+    expect(html).toContain('.session-hit-badge.is-skill');
   });
 
   it('redacts sensitive snapshot and dashboard fields when privacy mode is redacted', () => {
