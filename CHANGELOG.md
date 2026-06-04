@@ -4,6 +4,12 @@ All notable changes to `claude-telemetry` will be documented in this file.
 
 The format is based on Keep a Changelog and this project uses Semantic Versioning.
 
+## [1.3.0] - 2026-06-04
+
+- Count knowledge-base hits from Bash commands that read knowledge files, such as `cat`, `head`, `tail`, `sed`, `nl`, `less`, and `more`.
+- Kept Bash telemetry as `tool_bash` events instead of emitting synthetic `tool_read` rows; knowledge matching now handles Bash commands during aggregation.
+- Added safeguards for shell parsing, including command separators, common redirects, duplicate reads, and `sed` scripts that should not be mistaken for file paths.
+
 ## [1.2.0] - 2026-04-23
 
 - Moved context occupancy to the session header and removed per-reply API call counts from the dashboard reply metadata.
