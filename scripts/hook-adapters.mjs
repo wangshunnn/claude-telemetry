@@ -1,17 +1,53 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { resolve } from 'node:path';
+import { extractReadFilesFromShellCommand } from './metrics.mjs';
 import { normalizeAgent } from './paths.mjs';
+import { MAX_REPLY_LEN, coerceReply } from './transcript-turn.mjs';
 
 const n = (v) => (v === undefined ? null : v);
 
 function compactInput(input) {
   if (!input || typeof input !== 'object') return n(input);
   const out = {};
-  for (const key of ['command', 'description', 'file_path', 'path', 'pattern', 'glob', 'query']) {
+  for (const key of ['command', 'description', 'file_path', 'path', 'pattern', 'glob', 'query', 'model', 'subagent_type']) {
     if (input[key] !== undefined) out[key] = input[key];
   }
   return Object.keys(out).length ? out : null;
+}
+
+function addDefined(out, key, value) {
+  if (value !== undefined && value !== null && value !== '') out[key] = value;
+}
+
+function truncateText(value, max = MAX_REPLY_LEN) {
+  if (typeof value !== 'string') return '';
+  return value.length > max ? value.slice(0, max) + '…' : value;
+}
+
+function textPayload(value) {
+  const text = coerceReply(value);
+  const truncated = text.length > MAX_REPLY_LEN;
+  const body = truncated ? truncateText(text) : text;
+  return {
+    text: body,
+    length: body.length,
+    truncated,
+  };
+}
+
+function claudeCommonFields(input) {
+  const out = {};
+  addDefined(out, 'agent_id', input?.agent_id);
+  addDefined(out, 'agent_type', input?.agent_type);
+  addDefined(out, 'tool_use_id', input?.tool_use_id);
+  addDefined(out, 'duration_ms', input?.duration_ms);
+  return out;
+}
+
+function subagentTypeFromToolInput(input) {
+  if (!input || typeof input !== 'object') return null;
+  return input.subagent_type || input.agent_type || input.agent || input.name || null;
 }
 
 function detectInstalledClaudeSkill(name, cwd) {
@@ -40,6 +76,48 @@ function detectInstalledClaudeSkill(name, cwd) {
 const claudeBuilders = {
   session_start: (i) => ({ event: 'session_start', cwd: n(i.cwd) }),
   user_prompt: (i) => ({ event: 'user_prompt', prompt: n(i.prompt) }),
+  subagent_request: (i) => ({
+    event: 'subagent_request',
+    source_hook: 'PreToolUse',
+    tool: n(i.tool_name),
+    agent_type: n(subagentTypeFromToolInput(i.tool_input)),
+    description: n(i.tool_input?.description),
+    prompt: n(i.tool_input?.prompt),
+    model: n(i.tool_input?.model),
+  }),
+  subagent_start: (i) => ({
+    event: 'subagent_start',
+    source_hook: 'SubagentStart',
+    agent_id: n(i.agent_id),
+    agent_type: n(i.agent_type),
+  }),
+  subagent_stop: (i) => {
+    const reply = textPayload(i.last_assistant_message);
+    return {
+      event: 'subagent_stop',
+      source_hook: 'SubagentStop',
+      agent_id: n(i.agent_id),
+      agent_type: n(i.agent_type),
+      agent_transcript_path: n(i.agent_transcript_path),
+      reply: reply.text,
+      reply_length: reply.length,
+      reply_truncated: reply.truncated,
+    };
+  },
+  subagent_result: (i) => {
+    const response = textPayload(i.tool_response);
+    return {
+      event: 'subagent_result',
+      source_hook: 'PostToolUse',
+      tool: n(i.tool_name),
+      agent_type: n(subagentTypeFromToolInput(i.tool_input)),
+      description: n(i.tool_input?.description),
+      response: response.text,
+      response_length: response.length,
+      response_truncated: response.truncated,
+      duration_ms: n(i.duration_ms),
+    };
+  },
   notification: (i) => ({
     event: 'notification',
     source_hook: 'Notification',
@@ -93,6 +171,14 @@ const claudeBuilders = {
     skill: n(i.tool_input?.skill),
     args: n(i.tool_input?.args),
   }),
+  tool_failure: (i) => ({
+    event: 'tool_failure',
+    source_hook: 'PostToolUseFailure',
+    tool: n(i.tool_name),
+    input: compactInput(i.tool_input),
+    error: n(i.error || i.error_message || i.tool_error || i.tool_response?.error || i.tool_response?.stderr),
+    duration_ms: n(i.duration_ms),
+  }),
   slash_command: (i) => {
     const commandName = typeof i.command_name === 'string' ? i.command_name.trim() : '';
     if (!commandName) return null;
@@ -107,86 +193,10 @@ const claudeBuilders = {
   },
 };
 
-function splitShellWords(command) {
-  if (typeof command !== 'string' || !command.trim()) return [];
-  const words = [];
-  let current = '';
-  let quote = '';
-  let escaped = false;
-
-  for (const ch of command) {
-    if (escaped) {
-      current += ch;
-      escaped = false;
-      continue;
-    }
-    if (ch === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (quote) {
-      if (ch === quote) quote = '';
-      else current += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
-    }
-    if (/\s/.test(ch)) {
-      if (current) {
-        words.push(current);
-        current = '';
-      }
-      continue;
-    }
-    if ('|;&'.includes(ch)) break;
-    current += ch;
-  }
-  if (current) words.push(current);
-  return words;
-}
-
-function isLikelyPath(value) {
-  return typeof value === 'string' &&
-    value &&
-    !value.startsWith('-') &&
-    !/^[A-Z_][A-Z0-9_]*=/.test(value) &&
-    (value.includes('/') || value.includes('.') || /^[A-Za-z0-9_-]+\.(md|mdc|txt|json|toml|ya?ml)$/i.test(value));
-}
-
 function resolveHookPath(path, cwd) {
   if (typeof path !== 'string' || !path) return null;
   if (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) return path;
   return resolve(cwd || process.cwd(), path);
-}
-
-function extractReadFilesFromBash(command, cwd) {
-  const words = splitShellWords(command);
-  if (!words.length) return [];
-  const executable = basename(words[0]);
-  const rest = words.slice(1);
-
-  if (['cat', 'nl'].includes(executable)) {
-    return rest.filter(isLikelyPath).map((p) => resolveHookPath(p, cwd)).filter(Boolean);
-  }
-
-  if (['head', 'tail'].includes(executable)) {
-    const paths = [];
-    for (let index = 0; index < rest.length; index += 1) {
-      const word = rest[index];
-      if (!isLikelyPath(word)) continue;
-      paths.push(resolveHookPath(word, cwd));
-    }
-    return paths.filter(Boolean);
-  }
-
-  if (executable === 'sed') {
-    const candidates = rest.filter(isLikelyPath);
-    return candidates.slice(-1).map((p) => resolveHookPath(p, cwd)).filter(Boolean);
-  }
-
-  return [];
 }
 
 function commandFromToolInput(input) {
@@ -227,7 +237,7 @@ function codexPostToolUse(i) {
       command: n(command),
       description: n(input.description),
     }];
-    for (const file of extractReadFilesFromBash(command, cwd)) {
+    for (const file of extractReadFilesFromShellCommand(command, cwd)) {
       events.push({
         event: 'tool_read',
         source_hook: 'PostToolUse',
@@ -312,6 +322,7 @@ export function buildHookEvents(agent, profile, input) {
     .filter(Boolean)
     .map((event) => ({
       agent: normalizedAgent,
+      ...(normalizedAgent === 'claude' ? claudeCommonFields(input || {}) : {}),
       ...event,
     }));
 }

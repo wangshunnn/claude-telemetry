@@ -64,8 +64,11 @@ export function dashboardTaskMatchesFilter(task, filter = 'all', query = '') {
     ...(Array.isArray(task?.knowledgeTargets)
       ? task.knowledgeTargets.flatMap((target) => [target.label, target.kind, target.kindLabel])
       : []),
+    ...(Array.isArray(task?.subagents)
+      ? task.subagents.flatMap((agent) => [agent.id, agent.type])
+      : []),
     ...(Array.isArray(task?.events)
-      ? task.events.flatMap((event) => [event.label, event.detail, event.key, event.knowledgeKind, event.knowledgeKindLabel])
+      ? task.events.flatMap((event) => [event.label, event.detail, event.key, event.agentId, event.agentType, event.knowledgeKind, event.knowledgeKindLabel])
       : []),
   ].filter(Boolean).join(' ').toLowerCase();
 
@@ -1139,6 +1142,18 @@ export function renderHtml(snapshot, options = {}) {
     flex: 0 0 auto;
   }
 
+  .session-agent-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(124, 58, 237, 0.1);
+    color: #6d28d9;
+    font-size: 11px;
+    font-weight: 800;
+    margin-right: 6px;
+  }
+
   .session-detail {
     color: var(--muted);
     word-break: break-word;
@@ -1702,11 +1717,14 @@ function renderTaskRows(events) {
     const tag = '<span class="session-event-tag"><i style="background:' + esc(event.color) + '"></i>' + esc(event.label) + '</span>';
     const hitClass = eventKnowledgeHitClass(event);
     const hitBadge = eventKnowledgeHitBadge(event);
+    const agentBadge = event.agentType
+      ? '<span class="session-agent-badge">' + esc(event.agentType) + '</span>'
+      : '';
     return [
       '<tr class="session-row' + (hitClass ? ' ' + hitClass : '') + '">',
         '<td class="session-time">' + esc(event.ts) + '</td>',
         '<td>' + tag + '</td>',
-        '<td class="session-detail' + (hitClass ? ' ' + hitClass : '') + '">' + hitBadge + (hitBadge ? ' ' : '') + esc(event.detail || '—') + '</td>',
+        '<td class="session-detail' + (hitClass ? ' ' + hitClass : '') + '">' + agentBadge + hitBadge + (hitBadge ? ' ' : '') + esc(event.detail || '—') + '</td>',
       '</tr>',
     ].join('');
   }).join('');
@@ -1794,9 +1812,13 @@ function renderRecentSessions(tasks) {
       const idlePill = (task.idleCount || 0) > 0
         ? '<span class="pill">等待 ' + esc(task.idleCount) + '</span>'
         : '';
+      const subagentPill = (task.subagentCount || 0) > 0
+        ? '<span class="pill">subagents ' + esc(task.subagentCount) + '</span>'
+        : '';
       const pills = [
         '<span class="pill">' + esc(task.eventCount) + ' events</span>',
         '<span class="pill">' + esc(task.knowledgeCount) + ' 知识命中</span>',
+        subagentPill,
         '<span class="pill">耗时 ' + esc(durationLabel) + '</span>',
         outputPill,
         approvalPill,

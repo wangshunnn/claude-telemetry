@@ -26,6 +26,7 @@ import {
   shortenHome,
   compactPath as _compactPath,
   extractKnowledgeTarget as _extractKnowledgeTarget,
+  extractKnowledgeTargets as _extractKnowledgeTargets,
 } from './metrics.mjs';
 
 function agentFromArgs(argv = process.argv.slice(2)) {
@@ -110,10 +111,35 @@ const EVENT_META = {
     shortLabel: 'tool',
     color: '#64748b',
   },
+  tool_failure: {
+    label: 'Tool Failure',
+    shortLabel: 'tool_failure',
+    color: '#d94841',
+  },
   skill_invoked: {
     label: 'Skill',
     shortLabel: 'skill',
     color: '#d94841',
+  },
+  subagent_request: {
+    label: 'Subagent Request',
+    shortLabel: 'agent:request',
+    color: '#7c3aed',
+  },
+  subagent_start: {
+    label: 'Subagent Start',
+    shortLabel: 'agent:start',
+    color: '#14866d',
+  },
+  subagent_stop: {
+    label: 'Subagent Stop',
+    shortLabel: 'agent:stop',
+    color: '#6b7280',
+  },
+  subagent_result: {
+    label: 'Subagent Result',
+    shortLabel: 'agent:result',
+    color: '#0891b2',
   },
   permission_request: {
     label: '审批请求',
@@ -276,10 +302,29 @@ function formatDuration(ms) {
 const compactPath = (p) => _compactPath(p, PROJECT_ROOT);
 
 const extractKnowledgeTarget = (e) => _extractKnowledgeTarget(e, KNOWLEDGE_TARGET_DEFS, PROJECT_ROOT);
+const extractKnowledgeTargets = (e) => _extractKnowledgeTargets(e, KNOWLEDGE_TARGET_DEFS, PROJECT_ROOT) || [];
 
 function incrementMap(map, key, amount = 1) {
   if (!key) return;
   map.set(key, (map.get(key) ?? 0) + amount);
+}
+
+function recordKnowledgeTarget(map, target) {
+  if (!target) return;
+  if (!map.has(target.key)) {
+    map.set(target.key, {
+      ...target,
+      sources: new Set([target.source]),
+    });
+  } else {
+    map.get(target.key).sources.add(target.source);
+  }
+}
+
+function recordKnowledgeTargets(map, event) {
+  for (const target of extractKnowledgeTargets(event)) {
+    recordKnowledgeTarget(map, target);
+  }
 }
 
 function ensureDayBucket(map, day) {
@@ -333,6 +378,9 @@ function summarizeEvent(event) {
   const knowledgeTarget = extractKnowledgeTarget(event);
   let label = meta.shortLabel;
   let detail = '';
+  const agentType = typeof event.agent_type === 'string' ? event.agent_type : '';
+  const agentId = typeof event.agent_id === 'string' ? event.agent_id : '';
+  const toolLabel = (base) => agentType ? `${agentType}:${base}` : base;
 
   switch (event.event) {
     case 'session_start':
@@ -353,30 +401,56 @@ function summarizeEvent(event) {
       detail = compactPath(event.raw?.file_path);
       break;
     case 'tool_read':
+      label = toolLabel('read');
       detail = compactPath(event.file);
       break;
     case 'tool_search':
-      label = event.tool ? `search:${String(event.tool).toLowerCase()}` : label;
+      label = event.tool ? toolLabel(`search:${String(event.tool).toLowerCase()}`) : toolLabel(label);
       detail = [event.pattern, event.glob, compactPath(event.path)].filter(Boolean).join(' · ');
       break;
     case 'tool_bash':
-      label = 'bash';
+      label = toolLabel('bash');
       detail = truncate(event.description || event.command || '', 140);
       break;
     case 'tool_write':
-      label = event.tool ? `write:${String(event.tool).toLowerCase()}` : label;
+      label = event.tool ? toolLabel(`write:${String(event.tool).toLowerCase()}`) : toolLabel(label);
       detail = compactPath(event.file);
       break;
     case 'tool_use':
-      label = event.tool ? `tool:${String(event.tool).toLowerCase()}` : label;
+      label = event.tool ? toolLabel(`tool:${String(event.tool).toLowerCase()}`) : toolLabel(label);
       detail = truncate(event.input?.description || event.input?.command || event.input?.path || event.input?.query || '', 140);
       break;
+    case 'tool_failure':
+      label = event.tool ? toolLabel(`fail:${String(event.tool).toLowerCase()}`) : toolLabel('fail');
+      detail = truncate(event.error || event.input?.description || event.input?.command || '', 140);
+      break;
     case 'skill_invoked':
-      label = event.skill ? `skill:${event.skill}` : label;
+      label = event.skill ? toolLabel(`skill:${event.skill}`) : toolLabel(label);
       detail = typeof event.args === 'string' ? truncate(event.args, 140) : '';
       break;
+    case 'subagent_request':
+      detail = [event.agent_type || '', event.description || event.prompt || event.model || '']
+        .filter(Boolean)
+        .map((item) => truncate(item, 140))
+        .join(' · ');
+      break;
+    case 'subagent_start':
+      detail = [event.agent_type || '', event.agent_id || ''].filter(Boolean).join(' · ');
+      break;
+    case 'subagent_stop':
+      detail = [event.agent_type || '', event.reply || event.agent_id || compactPath(event.agent_transcript_path)]
+        .filter(Boolean)
+        .map((item) => truncate(item, 140))
+        .join(' · ');
+      break;
+    case 'subagent_result':
+      detail = [event.agent_type || '', event.response || event.description || '']
+        .filter(Boolean)
+        .map((item) => truncate(item, 140))
+        .join(' · ');
+      break;
     case 'permission_request':
-      label = event.tool ? `approval:${event.tool}` : 'approval';
+      label = event.tool ? toolLabel(`approval:${event.tool}`) : toolLabel('approval');
       detail = truncate(
         event.file_path ||
         event.input?.description ||
@@ -410,10 +484,67 @@ function summarizeEvent(event) {
     color: meta.color,
     label,
     detail,
+    agentId,
+    agentType,
     knowledgeHit: Boolean(knowledgeTarget),
     knowledgeKind: knowledgeTarget?.kind ?? '',
     knowledgeKindLabel: knowledgeTarget?.kindLabel ?? '',
   };
+}
+
+function recordSubagent(task, event) {
+  const id = typeof event?.agent_id === 'string' ? event.agent_id : '';
+  if (!id) return;
+  if (!task.subagents.has(id)) {
+    task.subagents.set(id, {
+      id,
+      type: typeof event.agent_type === 'string' ? event.agent_type : '',
+    });
+    return;
+  }
+  const current = task.subagents.get(id);
+  if (!current.type && typeof event.agent_type === 'string') current.type = event.agent_type;
+}
+
+function isPostStopContinuationEvent(event) {
+  const eventName = event?.event;
+  if (!eventName) return false;
+  return ![
+    'user_prompt',
+    'session_stop',
+    'session_start',
+    'notification',
+    'instructions_loaded',
+  ].includes(eventName);
+}
+
+function computeTerminalStopIndexes(sortedEvents) {
+  const bySession = new Map();
+  for (const item of sortedEvents) {
+    const sessionId = item.event.session_id ?? '(unknown)';
+    if (!bySession.has(sessionId)) bySession.set(sessionId, []);
+    bySession.get(sessionId).push(item);
+  }
+
+  const terminalStopIndexes = new Set();
+  for (const items of bySession.values()) {
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (item.event.event !== 'session_stop') continue;
+
+      let isTerminal = true;
+      for (let nextIndex = index + 1; nextIndex < items.length; nextIndex += 1) {
+        const nextEvent = items[nextIndex].event;
+        if (nextEvent.event === 'user_prompt') break;
+        if (isPostStopContinuationEvent(nextEvent)) {
+          isTerminal = false;
+          break;
+        }
+      }
+      if (isTerminal) terminalStopIndexes.add(item.index);
+    }
+  }
+  return terminalStopIndexes;
 }
 
 function computeMetrics(events) {
@@ -425,12 +556,13 @@ function computeMetrics(events) {
       if (aTs === bTs) return a.index - b.index;
       return aTs.localeCompare(bTs);
     });
+  const terminalStopIndexes = computeTerminalStopIndexes(sortedEvents);
 
   const sessionState = new Map();
   const tasks = [];
   let lastEventAt = null;
 
-  for (const { event } of sortedEvents) {
+  for (const { event, index } of sortedEvents) {
     const sessionId = event.session_id ?? '(unknown)';
     if (!lastEventAt || (event.ts ?? '') > lastEventAt) lastEventAt = event.ts ?? lastEventAt;
 
@@ -456,16 +588,7 @@ function computeMetrics(events) {
       const knowledgeTargets = new Map();
 
       for (const preludeEvent of preludeEvents) {
-        const target = extractKnowledgeTarget(preludeEvent);
-        if (!target) continue;
-        if (!knowledgeTargets.has(target.key)) {
-          knowledgeTargets.set(target.key, {
-            ...target,
-            sources: new Set([target.source]),
-          });
-        } else {
-          knowledgeTargets.get(target.key).sources.add(target.source);
-        }
+        recordKnowledgeTargets(knowledgeTargets, preludeEvent);
       }
 
       state.sequence += 1;
@@ -479,7 +602,7 @@ function computeMetrics(events) {
         displayStart: formatBjFull(preludeEvents[0]?.ts ?? event.ts),
         displayEnd: formatBjFull(event.ts),
         day: formatBjDay(event.ts),
-        status: 'success',
+        status: 'open',
         eventCount: 1 + summarizedPreludeEvents.length,
         knowledgeTargets,
         events: [...summarizedPreludeEvents, summarizeEvent(event)],
@@ -493,6 +616,7 @@ function computeMetrics(events) {
         approvalCount: 0,
         idleCount: 0,
         approvalTools: new Map(),
+        subagents: new Map(),
       };
       tasks.push(task);
       state.openTask = task;
@@ -507,18 +631,9 @@ function computeMetrics(events) {
     task.end = event.ts || task.end;
     task.displayEnd = formatBjFull(task.end);
     task.events.push(summarizeEvent(event));
+    recordSubagent(task, event);
 
-    const target = extractKnowledgeTarget(event);
-    if (target) {
-      if (!task.knowledgeTargets.has(target.key)) {
-        task.knowledgeTargets.set(target.key, {
-          ...target,
-          sources: new Set([target.source]),
-        });
-      } else {
-        task.knowledgeTargets.get(target.key).sources.add(target.source);
-      }
-    }
+    recordKnowledgeTargets(task.knowledgeTargets, event);
 
     if (event.event === 'permission_request') {
       task.approvalCount++;
@@ -534,7 +649,7 @@ function computeMetrics(events) {
       }
     }
 
-    if (event.event === 'session_stop') {
+    if (event.event === 'session_stop' && terminalStopIndexes.has(index)) {
       task.status = isStopFailure(event) ? 'failure' : 'success';
       if (typeof event.reply === 'string' && event.reply.length) {
         task.reply = event.reply;
@@ -748,6 +863,9 @@ function computeMetrics(events) {
         approvalTools: [...(task.approvalTools || new Map()).entries()]
           .map(([tool, count]) => ({ tool, count }))
           .sort((a, b) => b.count - a.count),
+        subagentCount: task.subagents?.size || 0,
+        subagents: [...(task.subagents || new Map()).values()]
+          .sort((a, b) => String(a.id || '').localeCompare(String(b.id || ''))),
       })),
   };
 }
@@ -828,13 +946,22 @@ function applyPrivacyMode(snapshot, privacyMode) {
         prompt: redactText(task.prompt, '[redacted prompt]'),
         reply: redactText(task.reply, '[redacted reply]'),
         model: redactText(task.model, '[redacted model]'),
+        subagents: Array.isArray(task.subagents)
+          ? task.subagents.map((_subagent, subagentIndex) => ({
+              id: `redacted-subagent-${subagentIndex + 1}`,
+              type: '[redacted subagent]',
+            }))
+          : [],
         knowledgeTargets: Array.isArray(task.knowledgeTargets)
           ? task.knowledgeTargets.map(redactTarget)
           : [],
         events: Array.isArray(task.events)
           ? task.events.map((event) => ({
               ...event,
+              label: event.agentType ? String(event.label || '').replace(String(event.agentType), '[redacted subagent]') : event.label,
               detail: redactText(event.detail, '[redacted detail]'),
+              agentId: redactText(event.agentId, '[redacted subagent]'),
+              agentType: redactText(event.agentType, '[redacted subagent]'),
             }))
           : [],
       };

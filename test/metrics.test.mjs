@@ -4,6 +4,8 @@ import {
   compactPath,
   classifyKnowledgePath,
   extractKnowledgeTarget,
+  extractKnowledgeTargets,
+  extractReadFilesFromShellCommand,
   extractSkillName,
 } from '../scripts/metrics.mjs';
 import { DEFAULT_KNOWLEDGE_TARGETS } from '../scripts/config.mjs';
@@ -165,6 +167,37 @@ describe('extractKnowledgeTarget', () => {
     const noSkillTargets = targets.filter((t) => t.kind !== 'skill');
     const ev = { event: 'skill_invoked', skill: 'foo' };
     expect(extractKnowledgeTarget(ev, noSkillTargets, root)).toBeNull();
+  });
+
+  it('tags docs read through Bash commands with source="tool_bash"', () => {
+    const ev = {
+      event: 'tool_bash',
+      command: 'ls docs/ 2>&1; echo "---"; head -100 docs/biz/index.md 2>&1',
+    };
+    const out = extractKnowledgeTargets(ev, targets, root);
+    expect(out).toEqual([{
+      key: '/tmp/proj/docs/biz/index.md',
+      label: 'docs/biz/index.md',
+      kind: 'doc',
+      kindLabel: 'Docs',
+      source: 'tool_bash',
+    }]);
+    expect(extractKnowledgeTarget(ev, targets, root)).toEqual(out[0]);
+  });
+
+  it('deduplicates multiple Bash reads of the same knowledge target', () => {
+    const ev = {
+      event: 'tool_bash',
+      command: 'cat docs/a.md docs/a.md; sed -n "1,20p" docs/b.md',
+    };
+    const out = extractKnowledgeTargets(ev, targets, root);
+    expect(out.map((target) => target.label)).toEqual(['docs/a.md', 'docs/b.md']);
+  });
+
+  it('does not treat sed scripts as read files', () => {
+    expect(extractReadFilesFromShellCommand('sed "s/foo/bar/" docs/a.md', root)).toEqual([
+      '/tmp/proj/docs/a.md',
+    ]);
   });
 });
 

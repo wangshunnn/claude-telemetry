@@ -179,6 +179,111 @@ describe('append-event.mjs tool events', () => {
       session_id: 's1',
     });
   });
+
+  it('keeps Claude Bash file reads as Bash events only', () => {
+    const result = runHook('tool_bash', {
+      session_id: 's1',
+      tool_name: 'Bash',
+      cwd: projectRoot,
+      tool_input: {
+        command: 'ls docs/ 2>&1; echo "---"; head -100 docs/biz/index.md 2>&1',
+        description: 'List docs structure',
+      },
+    }, { projectRoot, home: fakeHome });
+
+    expect(result.status).toBe(0);
+
+    const paths = resolveTelemetryPaths(projectRoot);
+    const events = readEvents(paths);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      event: 'tool_bash',
+      tool: 'Bash',
+      command: 'ls docs/ 2>&1; echo "---"; head -100 docs/biz/index.md 2>&1',
+      description: 'List docs structure',
+      session_id: 's1',
+    });
+  });
+
+  it('captures subagent lifecycle and launch metadata', () => {
+    const start = runHook('subagent_start', {
+      session_id: 's1',
+      agent_id: 'agent-1',
+      agent_type: 'research',
+      cwd: projectRoot,
+    }, { projectRoot, home: fakeHome });
+    const request = runHook('subagent_request', {
+      session_id: 's1',
+      tool_name: 'Task',
+      tool_input: {
+        subagent_type: 'research',
+        description: 'Map repo architecture',
+        prompt: 'Read the packages and summarize the framework',
+        model: 'claude-opus-4-6',
+      },
+    }, { projectRoot, home: fakeHome });
+    const stop = runHook('subagent_stop', {
+      session_id: 's1',
+      agent_id: 'agent-1',
+      agent_type: 'research',
+      agent_transcript_path: '/tmp/agent-1.jsonl',
+      last_assistant_message: [{ type: 'text', text: 'Architecture mapped' }],
+    }, { projectRoot, home: fakeHome });
+
+    expect(start.status).toBe(0);
+    expect(request.status).toBe(0);
+    expect(stop.status).toBe(0);
+
+    const events = readEvents(resolveTelemetryPaths(projectRoot));
+    expect(events).toHaveLength(3);
+    expect(events[0]).toMatchObject({
+      event: 'subagent_start',
+      source_hook: 'SubagentStart',
+      agent_id: 'agent-1',
+      agent_type: 'research',
+    });
+    expect(events[1]).toMatchObject({
+      event: 'subagent_request',
+      source_hook: 'PreToolUse',
+      tool: 'Task',
+      agent_type: 'research',
+      description: 'Map repo architecture',
+      prompt: 'Read the packages and summarize the framework',
+      model: 'claude-opus-4-6',
+    });
+    expect(events[2]).toMatchObject({
+      event: 'subagent_stop',
+      source_hook: 'SubagentStop',
+      agent_id: 'agent-1',
+      agent_type: 'research',
+      agent_transcript_path: '/tmp/agent-1.jsonl',
+      reply: 'Architecture mapped',
+      reply_length: 19,
+      reply_truncated: false,
+    });
+  });
+
+  it('preserves subagent identity on Claude tool events', () => {
+    const result = runHook('tool_read', {
+      session_id: 's1',
+      tool_name: 'Read',
+      agent_id: 'agent-1',
+      agent_type: 'research',
+      tool_input: {
+        file_path: resolve(projectRoot, 'docs', 'architecture.md'),
+      },
+    }, { projectRoot, home: fakeHome });
+
+    expect(result.status).toBe(0);
+
+    const [event] = readEvents(resolveTelemetryPaths(projectRoot));
+    expect(event).toMatchObject({
+      event: 'tool_read',
+      file: resolve(projectRoot, 'docs', 'architecture.md'),
+      agent_id: 'agent-1',
+      agent_type: 'research',
+    });
+  });
 });
 
 describe('append-event.mjs Codex adapter', () => {

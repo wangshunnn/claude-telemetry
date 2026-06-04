@@ -432,6 +432,330 @@ describe('build.mjs', () => {
     expect(html).toContain('.session-hit-badge.is-skill');
   });
 
+  it('counts docs read through Bash commands as knowledge hits', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: 'session-1',
+        event: 'session_start',
+        cwd: projectRoot,
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'Read the docs index',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-1',
+        event: 'tool_bash',
+        tool: 'Bash',
+        command: 'ls docs/ 2>&1; echo "---"; head -100 docs/biz/index.md 2>&1',
+        description: 'List docs structure',
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'done',
+        reply_length: 4,
+        reply_truncated: false,
+        tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 1,
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot);
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    expect(snapshot.metrics.kpi.knowledgeTaskCount).toBe(1);
+    expect(snapshot.metrics.knowledgeTargets[0]).toMatchObject({
+      key: resolve(projectRoot, 'docs', 'biz', 'index.md'),
+      label: 'docs/biz/index.md',
+      kind: 'doc',
+      kindLabel: 'Docs',
+      sourceLabels: ['tool_bash'],
+    });
+    expect(snapshot.metrics.recentTasks[0].knowledgeTargets).toEqual([
+      expect.objectContaining({
+        label: 'docs/biz/index.md',
+        kind: 'doc',
+        kindLabel: 'Docs',
+      }),
+    ]);
+    expect(snapshot.metrics.recentTasks[0].events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'tool_bash',
+        knowledgeHit: true,
+        knowledgeKind: 'doc',
+        knowledgeKindLabel: 'Docs',
+      }),
+    ]));
+  });
+
+  it('keeps subagent stop failures from prematurely closing the outer turn', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:00.000Z',
+        session_id: 'session-1',
+        event: 'session_start',
+        cwd: projectRoot,
+      },
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'Research the architecture',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'failure',
+        source_hook: 'StopFailure',
+        reply: 'Still analyzing',
+        reply_length: 15,
+        reply_truncated: false,
+        error: 'authentication_failed',
+        tokens: { input: 1, output: 10, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 1,
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-1',
+        event: 'tool_read',
+        file: resolve(projectRoot, 'docs', 'architecture.md'),
+      },
+      {
+        ts: '2026-01-01T00:00:04.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'Final report',
+        reply_length: 12,
+        reply_truncated: false,
+        tokens: { input: 2, output: 20, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 2,
+      },
+      {
+        ts: '2026-01-01T00:00:05.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'hello',
+      },
+      {
+        ts: '2026-01-01T00:00:06.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'hi',
+        reply_length: 2,
+        reply_truncated: false,
+        tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 },
+        max_context_tokens: 1,
+      },
+      {
+        ts: '2026-01-01T00:00:07.000Z',
+        session_id: 'session-1',
+        event: 'notification',
+        source_hook: 'Notification',
+        notification_type: 'idle_prompt',
+        message: 'Claude is waiting for your input',
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot);
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    const researchTask = snapshot.metrics.recentTasks.find((task) => task.sequence === 1);
+    const helloTask = snapshot.metrics.recentTasks.find((task) => task.sequence === 2);
+
+    expect(snapshot.metrics.kpi.totalTaskCount).toBe(2);
+    expect(snapshot.metrics.kpi.knowledgeTaskCount).toBe(1);
+    expect(researchTask).toMatchObject({
+      status: 'success',
+      reply: 'Final report',
+      end: '2026-01-01T00:00:04.000Z',
+      tokens: { input: 2, output: 20, cache_read: 0, cache_write: 0 },
+      eventCount: 4,
+    });
+    expect(researchTask.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'session_stop_failure', detail: 'authentication_failed' }),
+      expect.objectContaining({ key: 'tool_read', knowledgeHit: true, detail: 'docs/architecture.md' }),
+    ]));
+    expect(helloTask).toMatchObject({
+      status: 'success',
+      eventCount: 2,
+      idleCount: 0,
+    });
+  });
+
+  it('marks turns with post-stop continuation as open until a terminal stop arrives', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'Research the architecture',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'failure',
+        source_hook: 'StopFailure',
+        reply: 'Still analyzing',
+        reply_length: 15,
+        reply_truncated: false,
+        error: 'authentication_failed',
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-1',
+        event: 'tool_read',
+        file: resolve(projectRoot, 'docs', 'architecture.md'),
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot);
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    const [task] = snapshot.metrics.recentTasks;
+
+    expect(task).toMatchObject({
+      status: 'open',
+      reply: '',
+      eventCount: 3,
+      knowledgeCount: 1,
+    });
+    expect(snapshot.metrics.kpi.durationSampleCount).toBe(0);
+  });
+
+  it('surfaces subagent lifecycle and internal tool activity in recent tasks', () => {
+    const paths = resolveTelemetryPaths(projectRoot);
+    ensureTelemetryDir(paths);
+
+    const events = [
+      {
+        ts: '2026-01-01T00:00:01.000Z',
+        session_id: 'session-1',
+        event: 'user_prompt',
+        prompt: 'Research the architecture',
+      },
+      {
+        ts: '2026-01-01T00:00:02.000Z',
+        session_id: 'session-1',
+        event: 'subagent_request',
+        source_hook: 'PreToolUse',
+        tool: 'Task',
+        agent_type: 'research',
+        description: 'Map repo architecture',
+        prompt: 'Read the packages',
+        model: 'claude-opus-4-6',
+      },
+      {
+        ts: '2026-01-01T00:00:03.000Z',
+        session_id: 'session-1',
+        event: 'subagent_start',
+        source_hook: 'SubagentStart',
+        agent_id: 'agent-1',
+        agent_type: 'research',
+      },
+      {
+        ts: '2026-01-01T00:00:04.000Z',
+        session_id: 'session-1',
+        event: 'tool_read',
+        agent_id: 'agent-1',
+        agent_type: 'research',
+        file: resolve(projectRoot, 'docs', 'architecture.md'),
+      },
+      {
+        ts: '2026-01-01T00:00:05.000Z',
+        session_id: 'session-1',
+        event: 'subagent_stop',
+        source_hook: 'SubagentStop',
+        agent_id: 'agent-1',
+        agent_type: 'research',
+        reply: 'Architecture mapped',
+        reply_length: 19,
+        reply_truncated: false,
+      },
+      {
+        ts: '2026-01-01T00:00:06.000Z',
+        session_id: 'session-1',
+        event: 'session_stop',
+        stop_status: 'success',
+        source_hook: 'Stop',
+        reply: 'Final report',
+        reply_length: 12,
+        reply_truncated: false,
+      },
+    ];
+
+    writeFileSync(paths.events, events.map((event) => JSON.stringify(event)).join('\n') + '\n');
+
+    const result = runBuild(projectRoot);
+    expect(result.status).toBe(0);
+
+    const snapshot = JSON.parse(readFileSync(paths.snapshot, 'utf8'));
+    const [task] = snapshot.metrics.recentTasks;
+
+    expect(task.subagentCount).toBe(1);
+    expect(task.subagents).toEqual([{ id: 'agent-1', type: 'research' }]);
+    expect(task.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'subagent_request',
+        label: 'agent:request',
+        detail: 'research · Map repo architecture',
+        agentType: 'research',
+      }),
+      expect.objectContaining({
+        key: 'subagent_start',
+        label: 'agent:start',
+        detail: 'research · agent-1',
+        agentId: 'agent-1',
+        agentType: 'research',
+      }),
+      expect.objectContaining({
+        key: 'tool_read',
+        label: 'research:read',
+        detail: 'docs/architecture.md',
+        agentId: 'agent-1',
+        agentType: 'research',
+      }),
+      expect.objectContaining({
+        key: 'subagent_stop',
+        label: 'agent:stop',
+        detail: 'research · Architecture mapped',
+        agentId: 'agent-1',
+        agentType: 'research',
+      }),
+    ]));
+  });
+
   it('redacts sensitive snapshot and dashboard fields when privacy mode is redacted', () => {
     const paths = resolveTelemetryPaths(projectRoot);
     ensureTelemetryDir(paths);

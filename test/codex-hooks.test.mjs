@@ -42,6 +42,9 @@ describe('Codex hook installer', () => {
     expect(config.hooks.SessionStart[0].hooks[0].command).toContain(`${CODEX_HOOK_MARKER} append-event session_start`);
     expect(config.hooks.PostToolUse[0].matcher).toContain('Bash');
     expect(config.hooks.Stop[0].hooks[0].command).toContain(`${CODEX_HOOK_MARKER} on-stop`);
+    expect(config.hooks.SubagentStart).toBeUndefined();
+    expect(config.hooks.SubagentStop).toBeUndefined();
+    expect(config.hooks.PostToolUseFailure).toBeUndefined();
   });
 
   it('preserves unrelated hooks and is idempotent', () => {
